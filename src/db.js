@@ -1,21 +1,20 @@
-/// src/db.js
+// src/db.js
 const { Pool } = require('pg');
 require('dotenv').config();
 
+// Render uses DATABASE_URL, not individual host/user/password vars
 const pool = new Pool({
-  host: process.env.DB_HOST,
-  port: process.env.DB_PORT,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false
+  }
 });
 
-// Export the pool so scrapers and other modules can use it
 module.exports.pool = pool;
 
 module.exports = {
 
-  pool, // <-- keep this here for external access
+  pool,
 
   // ---------------- POSTS ----------------
 
@@ -185,4 +184,3 @@ module.exports = {
     return res.rows[0];
   }
 };
-
