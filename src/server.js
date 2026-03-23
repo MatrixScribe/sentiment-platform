@@ -30,6 +30,9 @@ const crossSourceInsights = require('./routes/crossSourceInsights');
 const narrativeShiftInsights = require('./routes/narrativeShiftInsights');
 const narrativeAlerts = require('./routes/narrativeAlerts');
 
+// -------------------- NEW: MANUAL INGEST ROUTE --------------------
+const manualIngestRoute = require('./routes/manualIngestRoute');
+
 // -------------------- PUBLIC ROUTES --------------------
 
 app.use('/api', dbTestRoute);       // <--- DB TEST ENDPOINT
@@ -51,6 +54,9 @@ app.use('/api/insights/narrative/alerts-store', authMiddleware, narrativeAlerts)
 
 app.use('/api/process', authMiddleware, processRoute);
 app.use('/api/analytics', authMiddleware, analyticsRoute);
+
+// NEW: Manual ingestion (protected)
+app.use('/api/ingest', authMiddleware, manualIngestRoute);
 
 // -------------------- CRON JOBS --------------------
 
