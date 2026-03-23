@@ -30,8 +30,9 @@ const crossSourceInsights = require('./routes/crossSourceInsights');
 const narrativeShiftInsights = require('./routes/narrativeShiftInsights');
 const narrativeAlerts = require('./routes/narrativeAlerts');
 
-// -------------------- NEW: MANUAL INGEST ROUTE --------------------
+// -------------------- INGEST ROUTES --------------------
 const manualIngestRoute = require('./routes/manualIngestRoute');
+const redditIngestRoute = require('./routes/redditIngestRoute');
 
 // -------------------- PUBLIC ROUTES --------------------
 
@@ -55,8 +56,9 @@ app.use('/api/insights/narrative/alerts-store', authMiddleware, narrativeAlerts)
 app.use('/api/process', authMiddleware, processRoute);
 app.use('/api/analytics', authMiddleware, analyticsRoute);
 
-// NEW: Manual ingestion (protected)
+// Ingestion (protected)
 app.use('/api/ingest', authMiddleware, manualIngestRoute);
+app.use('/api/ingest', authMiddleware, redditIngestRoute);
 
 // -------------------- CRON JOBS --------------------
 
