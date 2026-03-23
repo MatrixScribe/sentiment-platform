@@ -2,7 +2,6 @@
 const { Pool } = require('pg');
 require('dotenv').config();
 
-// Render uses DATABASE_URL, not individual host/user/password vars
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: {
@@ -10,10 +9,7 @@ const pool = new Pool({
   }
 });
 
-module.exports.pool = pool;
-
 module.exports = {
-
   pool,
 
   // ---------------- POSTS ----------------
