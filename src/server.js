@@ -32,7 +32,7 @@ const narrativeAlerts = require('./routes/narrativeAlerts');
 
 // -------------------- PUBLIC ROUTES --------------------
 
-app.use('/api/db-test', dbTestRoute);       // <--- DB TEST ENDPOINT
+app.use('/api', dbTestRoute);       // <--- DB TEST ENDPOINT
 app.use('/api/auth', authRoute);
 
 // PayPal (public)
