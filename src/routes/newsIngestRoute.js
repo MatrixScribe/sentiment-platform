@@ -12,7 +12,7 @@ router.post('/news', async (req, res) => {
     const { query = "south africa", limit = 5 } = req.body;
     const tenantId = req.user.tenant_id;
 
-    const url = `https://gnews.io/api/v4/search?q=${encodeURIComponent(query)}&lang=en&max=${limit}&apikey=demo`;
+    const url = `https://newsdata.io/api/1/news?apikey=${process.env.NEWSDATA_API_KEY}&q=${encodeURIComponent(query)}&language=en&country=za&size=${limit}`;
 
     const response = await fetch(url, {
       headers: { "User-Agent": "MatrixScribeBot/1.0" }
@@ -20,14 +20,14 @@ router.post('/news', async (req, res) => {
 
     const data = await response.json();
 
-    if (!data.articles) {
+    if (!data.results) {
       console.error("News API returned unexpected structure:", data);
       return res.status(400).json({ error: "Invalid query or no news returned" });
     }
 
     const results = [];
 
-    for (const article of data.articles) {
+    for (const article of data.results) {
       const content = `${article.title}\n\n${article.description || ""}\n\n${article.content || ""}`;
 
       // 1. Insert post
@@ -35,7 +35,7 @@ router.post('/news', async (req, res) => {
         `INSERT INTO posts (external_id, source, content, tenant_id)
          VALUES ($1, $2, $3, $4)
          RETURNING id, content, created_at`,
-        [article.url, "news", content, tenantId]
+        [article.link, "news", content, tenantId]
       );
 
       const post = insert.rows[0];
@@ -50,7 +50,7 @@ router.post('/news', async (req, res) => {
 
       results.push({
         id: post.id,
-        external_id: article.url,
+        external_id: article.link,
         sentiment,
         topics
       });
