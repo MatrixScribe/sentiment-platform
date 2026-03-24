@@ -11,6 +11,17 @@ function authMiddleware(req, res, next) {
 
   const token = authHeader.split(" ")[1];
 
+  // ---------------- CRON TOKEN BYPASS ----------------
+  if (token === process.env.CRON_TOKEN) {
+    req.user = {
+      id: 0,                 // system user
+      email: "cron@system",  // not used, but required for structure
+      tenant_id: 1           // MatrixScribe system tenant
+    };
+    return next();
+  }
+
+  // ---------------- NORMAL JWT AUTH ----------------
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
 
