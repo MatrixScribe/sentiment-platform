@@ -4,6 +4,8 @@ const router = express.Router();
 const db = require('../db');
 const analyzeSentiment = require('../utils/sentiment');
 const extractTopics = require('../utils/topics');
+const hashContent = require('../utils/hash');
+const { findOrCreateClusterForPost } = require('../utils/storyClustering');
 const fetch = require('node-fetch');
 
 // ---------------- REDDIT INGESTION ----------------
@@ -21,27 +23,36 @@ router.post('/reddit', async (req, res) => {
     }
 
     const posts = data.data.children.map(p => p.data);
-
     const results = [];
 
     for (const p of posts) {
       const content = p.title + "\n\n" + (p.selftext || "");
+      const contentHash = hashContent(content);
 
-      // 1. Insert post
+      // 1. Insert post with hash dedupe
       const insert = await db.pool.query(
-        `INSERT INTO posts (external_id, source, content, tenant_id)
-         VALUES ($1, $2, $3, $4)
+        `INSERT INTO posts (external_id, source, content, content_hash, tenant_id)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT ON CONSTRAINT unique_content_hash DO NOTHING
          RETURNING id, content, created_at`,
-        [p.id, "reddit", content, tenantId]
+        [p.id, "reddit", content, contentHash, tenantId]
       );
+
+      // If duplicate, skip sentiment + topics + clustering
+      if (insert.rows.length === 0) {
+        continue;
+      }
 
       const post = insert.rows[0];
 
-      // 2. Sentiment
+      // 2. Assign to a story cluster (Step 4C)
+      await findOrCreateClusterForPost(post.id, content, tenantId);
+
+      // 3. Sentiment
       const sentiment = analyzeSentiment(content);
       await db.insertSentimentResult(post.id, sentiment, tenantId);
 
-      // 3. Topics
+      // 4. Topics
       const topics = extractTopics(content);
       await db.insertPostTopics(post.id, topics, tenantId);
 
