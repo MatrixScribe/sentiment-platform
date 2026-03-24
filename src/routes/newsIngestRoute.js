@@ -6,7 +6,6 @@ const analyzeSentiment = require('../utils/sentiment');
 const extractTopics = require('../utils/topics');
 const fetch = require('node-fetch');
 
-// ---------------- NEWS INGESTION ----------------
 router.post('/news', async (req, res) => {
   try {
     const { query = "south africa", limit = 5 } = req.body;
@@ -20,9 +19,13 @@ router.post('/news', async (req, res) => {
 
     const data = await response.json();
 
-    if (!data.results) {
+    // Defensive check: ensure results exists and is an array
+    if (!data || !Array.isArray(data.results)) {
       console.error("News API returned unexpected structure:", data);
-      return res.status(400).json({ error: "Invalid query or no news returned" });
+      return res.status(400).json({
+        error: "Invalid query or no news returned",
+        details: data
+      });
     }
 
     const results = [];
@@ -30,7 +33,6 @@ router.post('/news', async (req, res) => {
     for (const article of data.results) {
       const content = `${article.title}\n\n${article.description || ""}\n\n${article.content || ""}`;
 
-      // 1. Insert post
       const insert = await db.pool.query(
         `INSERT INTO posts (external_id, source, content, tenant_id)
          VALUES ($1, $2, $3, $4)
@@ -40,11 +42,9 @@ router.post('/news', async (req, res) => {
 
       const post = insert.rows[0];
 
-      // 2. Sentiment
       const sentiment = analyzeSentiment(content);
       await db.insertSentimentResult(post.id, sentiment, tenantId);
 
-      // 3. Topics
       const topics = extractTopics(content);
       await db.insertPostTopics(post.id, topics, tenantId);
 
