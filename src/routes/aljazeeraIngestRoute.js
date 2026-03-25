@@ -9,11 +9,21 @@ const hashContent = require('../utils/hash');
 const { findOrCreateClusterForPost } = require('../utils/storyClustering');
 const { getSourceId, getSourceWeight } = require('../utils/sourceRegistry');
 
-const parser = new RSSParser();
+const parser = new RSSParser({
+  requestOptions: {
+    headers: {
+      "User-Agent": "Mozilla/5.0",
+      "Accept": "application/rss+xml, application/xml, text/xml",
+      "Connection": "keep-alive"
+    },
+    redirect: "follow",
+    compress: false
+  }
+});
 
 router.post('/aljazeera', async (req, res) => {
   try {
-    const { feed = "https://www.aljazeera.com/xml/rss/all.xml" } = req.body;
+    const feed = "https://www.aljazeera.com/xml/rss/all.xml";
     const tenantId = req.user.tenant_id;
 
     const sourceId = await getSourceId("Al Jazeera");
@@ -29,7 +39,7 @@ router.post('/aljazeera', async (req, res) => {
       const insert = await db.pool.query(
         `INSERT INTO posts (external_id, source, source_id, content, content_hash, tenant_id)
          VALUES ($1, $2, $3, $4, $5, $6)
-         ON CONFLICT ON CONSTRAINT unique_content_hash DO NOTHING
+         ON CONFLICT ON CONSTRAINT unique_post_source DO NOTHING
          RETURNING id, content`,
         [item.link, "aljazeera", sourceId, content, contentHash, tenantId]
       );
@@ -49,7 +59,7 @@ router.post('/aljazeera', async (req, res) => {
       results.push({ id: post.id, external_id: item.link, sentiment, topics });
     }
 
-    res.json({ ok: true, feed, ingested: results.length, posts: results });
+    res.json({ ok: true, ingested: results.length, posts: results });
 
   } catch (err) {
     console.error("Al Jazeera ingestion error:", err);
