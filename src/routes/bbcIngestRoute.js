@@ -9,7 +9,18 @@ const hashContent = require('../utils/hash');
 const { findOrCreateClusterForPost } = require('../utils/storyClustering');
 const { getSourceId, getSourceWeight } = require('../utils/sourceRegistry');
 
-const parser = new RSSParser();
+const parser = new RSSParser({
+  requestOptions: {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+      "Accept": "application/rss+xml, application/xml, text/xml",
+      "Accept-Language": "en-US,en;q=0.9",
+      "Connection": "keep-alive"
+    },
+    redirect: "follow",
+    compress: false
+  }
+});
 
 router.post('/bbc', async (req, res) => {
   try {
@@ -46,10 +57,20 @@ router.post('/bbc', async (req, res) => {
       const topics = extractTopics(content);
       await db.insertPostTopics(post.id, topics, tenantId);
 
-      results.push({ id: post.id, external_id: item.link, sentiment, topics });
+      results.push({
+        id: post.id,
+        external_id: item.link,
+        sentiment,
+        topics
+      });
     }
 
-    res.json({ ok: true, feed, ingested: results.length, posts: results });
+    res.json({
+      ok: true,
+      feed,
+      ingested: results.length,
+      posts: results
+    });
 
   } catch (err) {
     console.error("BBC ingestion error:", err);
