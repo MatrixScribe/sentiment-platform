@@ -36,6 +36,12 @@ const redditIngestRoute = require('./routes/redditIngestRoute');
 const newsIngestRoute = require('./routes/newsIngestRoute');
 const reutersIngestRoute = require('./routes/reutersIngestRoute');
 
+// NEW GLOBAL RSS ROUTES
+const bbcIngestRoute = require('./routes/bbcIngestRoute');
+const dwIngestRoute = require('./routes/dwIngestRoute');
+const aljazeeraIngestRoute = require('./routes/aljazeeraIngestRoute');
+const france24IngestRoute = require('./routes/france24IngestRoute');
+
 // -------------------- PUBLIC ROUTES --------------------
 
 app.use('/api', dbTestRoute);
@@ -58,11 +64,18 @@ app.use('/api/insights/narrative/alerts-store', authMiddleware, narrativeAlerts)
 app.use('/api/process', authMiddleware, processRoute);
 app.use('/api/analytics', authMiddleware, analyticsRoute);
 
-// Ingestion (protected)
+// -------------------- INGESTION (PROTECTED) --------------------
+
 app.use('/api/ingest', authMiddleware, manualIngestRoute);
 app.use('/api/ingest', authMiddleware, redditIngestRoute);
 app.use('/api/ingest', authMiddleware, newsIngestRoute);
 app.use('/api/ingest', authMiddleware, reutersIngestRoute);
+
+// NEW GLOBAL RSS INGEST ROUTES
+app.use('/api/ingest', authMiddleware, bbcIngestRoute);
+app.use('/api/ingest', authMiddleware, dwIngestRoute);
+app.use('/api/ingest', authMiddleware, aljazeeraIngestRoute);
+app.use('/api/ingest', authMiddleware, france24IngestRoute);
 
 // -------------------- CRON JOBS --------------------
 
