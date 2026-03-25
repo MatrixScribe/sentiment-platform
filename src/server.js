@@ -33,7 +33,9 @@ const narrativeAlerts = require('./routes/narrativeAlerts');
 // -------------------- INGEST ROUTES --------------------
 const manualIngestRoute = require('./routes/manualIngestRoute');
 const redditIngestRoute = require('./routes/redditIngestRoute');
-const newsIngestRoute = require('./routes/newsIngestRoute');   // <--- NEW
+const newsIngestRoute = require('./routes/newsIngestRoute');
+const reutersIngestRoute = require('./routes/reutersIngestRoute');   //
+<--- NEW
 
 // -------------------- PUBLIC ROUTES --------------------
 
@@ -60,7 +62,9 @@ app.use('/api/analytics', authMiddleware, analyticsRoute);
 // Ingestion (protected)
 app.use('/api/ingest', authMiddleware, manualIngestRoute);
 app.use('/api/ingest', authMiddleware, redditIngestRoute);
-app.use('/api/ingest', authMiddleware, newsIngestRoute);       // <--- NEW
+app.use('/api/ingest', authMiddleware, newsIngestRoute);
+app.use('/api/ingest', authMiddleware, reutersIngestRoute);
+   // <--- NEW
 
 // -------------------- CRON JOBS --------------------
 

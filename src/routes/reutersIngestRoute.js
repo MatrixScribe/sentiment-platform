@@ -1,35 +1,30 @@
-// src/routes/redditIngestRoute.js
+// src/routes/reutersIngestRoute.js
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
+const RSSParser = require('rss-parser');
 const analyzeSentiment = require('../utils/sentiment');
 const extractTopics = require('../utils/topics');
 const hashContent = require('../utils/hash');
 const { findOrCreateClusterForPost } = require('../utils/storyClustering');
 const { getSourceId, getSourceWeight } = require('../utils/sourceRegistry');
-const fetch = require('node-fetch');
 
-router.post('/reddit', async (req, res) => {
+const parser = new RSSParser();
+
+router.post('/reuters', async (req, res) => {
   try {
-    const { subreddit = "southafrica", limit = 5 } = req.body;
+    const { feed = "https://www.reuters.com/rssFeed/topNews" } = req.body;
     const tenantId = req.user.tenant_id;
 
-    const sourceId = await getSourceId("Reddit");
+    const sourceId = await getSourceId("Reuters");
     const sourceWeight = await getSourceWeight(sourceId);
 
-    const url = `https://www.reddit.com/r/${subreddit}/new.json?limit=${limit}`;
-    const response = await fetch(url);
-    const data = await response.json();
+    const feedData = await parser.parseURL(feed);
 
-    if (!data.data || !data.data.children) {
-      return res.status(400).json({ error: "Invalid subreddit or no data returned" });
-    }
-
-    const posts = data.data.children.map(p => p.data);
     const results = [];
 
-    for (const p of posts) {
-      const content = p.title + "\n\n" + (p.selftext || "");
+    for (const item of feedData.items) {
+      const content = `${item.title}\n\n${item.contentSnippet || ""}`;
       const contentHash = hashContent(content);
 
       const insert = await db.pool.query(
@@ -37,7 +32,7 @@ router.post('/reddit', async (req, res) => {
          VALUES ($1, $2, $3, $4, $5, $6)
          ON CONFLICT ON CONSTRAINT unique_content_hash DO NOTHING
          RETURNING id, content, created_at`,
-        [p.id, "reddit", sourceId, content, contentHash, tenantId]
+        [item.link, "reuters", sourceId, content, contentHash, tenantId]
       );
 
       if (insert.rows.length === 0) {
@@ -49,7 +44,7 @@ router.post('/reddit', async (req, res) => {
       await findOrCreateClusterForPost(post.id, content, tenantId);
 
       let sentiment = analyzeSentiment(content);
-      sentiment = sentiment * sourceWeight; // ⭐ apply weighting
+      sentiment = sentiment * sourceWeight;
       await db.insertSentimentResult(post.id, sentiment, tenantId);
 
       const topics = extractTopics(content);
@@ -57,7 +52,7 @@ router.post('/reddit', async (req, res) => {
 
       results.push({
         id: post.id,
-        external_id: p.id,
+        external_id: item.link,
         sentiment,
         topics
       });
@@ -65,14 +60,14 @@ router.post('/reddit', async (req, res) => {
 
     res.json({
       ok: true,
-      subreddit,
+      feed,
       ingested: results.length,
       posts: results
     });
 
   } catch (err) {
-    console.error("Reddit ingestion error:", err);
-    res.status(500).json({ error: "Failed to ingest from Reddit" });
+    console.error("Reuters ingestion error:", err);
+    res.status(500).json({ error: "Failed to ingest Reuters feed" });
   }
 });
 
