@@ -18,10 +18,10 @@ const analyticsRoute = require('./routes/analyticsRoute');
 const authRoute = require('./routes/authRoute');
 
 // PayPal Routes
-const paypalRoutes = require('./routes/paypalRoutes');          // Subscriptions
-const paypalOrders = require('./routes/paypalOrders');          // One-time Orders
-const paypalInvoices = require('./routes/paypalInvoices');      // Invoicing
-const paypalWebhook = require('./routes/paypalWebhook');        // Webhooks
+const paypalRoutes = require('./routes/paypalRoutes');
+const paypalOrders = require('./routes/paypalOrders');
+const paypalInvoices = require('./routes/paypalInvoices');
+const paypalWebhook = require('./routes/paypalWebhook');
 
 // Insights Routes
 const redditInsights = require('./routes/redditInsights');
@@ -34,19 +34,18 @@ const narrativeAlerts = require('./routes/narrativeAlerts');
 const manualIngestRoute = require('./routes/manualIngestRoute');
 const redditIngestRoute = require('./routes/redditIngestRoute');
 const newsIngestRoute = require('./routes/newsIngestRoute');
-const reutersIngestRoute = require('./routes/reutersIngestRoute');   //
-<--- NEW
+const reutersIngestRoute = require('./routes/reutersIngestRoute');
 
 // -------------------- PUBLIC ROUTES --------------------
 
-app.use('/api', dbTestRoute);       // <--- DB TEST ENDPOINT
+app.use('/api', dbTestRoute);
 app.use('/api/auth', authRoute);
 
 // PayPal (public)
 app.use('/api/paypal', paypalRoutes);
 app.use('/api/paypal/orders', paypalOrders);
 app.use('/api/paypal/invoices', paypalInvoices);
-app.use('/api/paypal/webhook', paypalWebhook); // must remain public
+app.use('/api/paypal/webhook', paypalWebhook);
 
 // -------------------- PROTECTED ROUTES --------------------
 
@@ -64,11 +63,10 @@ app.use('/api/ingest', authMiddleware, manualIngestRoute);
 app.use('/api/ingest', authMiddleware, redditIngestRoute);
 app.use('/api/ingest', authMiddleware, newsIngestRoute);
 app.use('/api/ingest', authMiddleware, reutersIngestRoute);
-   // <--- NEW
 
 // -------------------- CRON JOBS --------------------
 
-require('./cron/scheduler'); // Starts daily intelligence pipeline
+require('./cron/scheduler');
 
 // -------------------- SERVER --------------------
 
