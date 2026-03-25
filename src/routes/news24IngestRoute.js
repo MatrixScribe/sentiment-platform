@@ -10,6 +10,7 @@ const { findOrCreateClusterForPost } = require('../utils/storyClustering');
 const { getSourceId, getSourceWeight } = require('../utils/sourceRegistry');
 
 const parser = new RSSParser({
+  defaultRSS: 2.0, // Force RSS mode
   requestOptions: {
     headers: {
       "User-Agent": "Mozilla/5.0",
@@ -28,10 +29,27 @@ router.post('/news24', async (req, res) => {
     const sourceId = await getSourceId("News24");
     const sourceWeight = await getSourceWeight(sourceId);
 
-    const feedData = await parser.parseURL(feed);
+    // Fetch raw XML manually
+    const rawResponse = await fetch(feed, {
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/rss+xml, application/xml, text/xml"
+      }
+    });
+
+    const rawXML = await rawResponse.text();
+
+    // Clean invalid namespaces that break rss-parser
+    const cleanedXML = rawXML
+      .replace(/xmlns(:\w+)?="[^"]*"/g, "")
+      .replace(/<\?xml[^>]*>/g, "");
+
+    // Parse manually
+    const feedData = await parser.parseString(cleanedXML);
+
     const results = [];
 
-    for (const item of feedData.items) {
+    for (const item of feedData.items || []) {
       const content = `${item.title}\n\n${item.contentSnippet || ""}`;
       const contentHash = hashContent(content);
 
