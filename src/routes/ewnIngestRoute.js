@@ -9,6 +9,10 @@ const hashContent = require('../utils/hash');
 const { findOrCreateClusterForPost } = require('../utils/storyClustering');
 const { getSourceId, getSourceWeight } = require('../utils/sourceRegistry');
 
+// Fly.io proxy URL for EWN
+const FLY_PROXY_EWN =
+  "https://matrix-proxy.fly.dev/proxy?url=https%3A%2F%2Fewn.co.za%2FRSS";
+
 const parser = new RSSParser({
   requestOptions: {
     headers: {
@@ -22,7 +26,8 @@ const parser = new RSSParser({
 
 router.post('/ewn', async (req, res) => {
   try {
-    const feed = "https://ewn.co.za/RSS";
+    // Always use Fly.io proxy unless overridden
+    const feed = req.body.feed || FLY_PROXY_EWN;
     const tenantId = req.user.tenant_id;
 
     const sourceId = await getSourceId("EWN");
@@ -54,10 +59,20 @@ router.post('/ewn', async (req, res) => {
       const topics = extractTopics(content);
       await db.insertPostTopics(post.id, topics, tenantId);
 
-      results.push({ id: post.id, external_id: item.link, sentiment, topics });
+      results.push({
+        id: post.id,
+        external_id: item.link,
+        sentiment,
+        topics
+      });
     }
 
-    res.json({ ok: true, ingested: results.length, posts: results });
+    res.json({
+      ok: true,
+      feed,
+      ingested: results.length,
+      posts: results
+    });
 
   } catch (err) {
     console.error("EWN ingestion error:", err);

@@ -9,8 +9,11 @@ const hashContent = require('../utils/hash');
 const { findOrCreateClusterForPost } = require('../utils/storyClustering');
 const { getSourceId, getSourceWeight } = require('../utils/sourceRegistry');
 
+// Fly.io proxy URL for News24
+const FLY_PROXY_NEWS24 =
+  "https://matrix-proxy.fly.dev/proxy?url=https%3A%2F%2Ffeeds.news24.com%2Farticles%2Fnews24%2Ftopstories%2Frss";
+
 const parser = new RSSParser({
-  defaultRSS: 2.0, // Force RSS mode
   requestOptions: {
     headers: {
       "User-Agent": "Mozilla/5.0",
@@ -23,29 +26,15 @@ const parser = new RSSParser({
 
 router.post('/news24', async (req, res) => {
   try {
-    const feed = "https://feeds.news24.com/articles/news24/topstories/rss";
+    // Always use Fly.io proxy unless overridden
+    const feed = req.body.feed || FLY_PROXY_NEWS24;
     const tenantId = req.user.tenant_id;
 
     const sourceId = await getSourceId("News24");
     const sourceWeight = await getSourceWeight(sourceId);
 
-    // Fetch raw XML manually
-    const rawResponse = await fetch(feed, {
-      headers: {
-        "User-Agent": "Mozilla/5.0",
-        "Accept": "application/rss+xml, application/xml, text/xml"
-      }
-    });
-
-    const rawXML = await rawResponse.text();
-
-    // Clean invalid namespaces that break rss-parser
-    const cleanedXML = rawXML
-      .replace(/xmlns(:\w+)?="[^"]*"/g, "")
-      .replace(/<\?xml[^>]*>/g, "");
-
-    // Parse manually
-    const feedData = await parser.parseString(cleanedXML);
+    // Parse RSS directly through Fly.io (no XML cleaning needed)
+    const feedData = await parser.parseURL(feed);
 
     const results = [];
 
@@ -72,10 +61,20 @@ router.post('/news24', async (req, res) => {
       const topics = extractTopics(content);
       await db.insertPostTopics(post.id, topics, tenantId);
 
-      results.push({ id: post.id, external_id: item.link, sentiment, topics });
+      results.push({
+        id: post.id,
+        external_id: item.link,
+        sentiment,
+        topics
+      });
     }
 
-    res.json({ ok: true, ingested: results.length, posts: results });
+    res.json({
+      ok: true,
+      feed,
+      ingested: results.length,
+      posts: results
+    });
 
   } catch (err) {
     console.error("News24 ingestion error:", err);

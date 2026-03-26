@@ -9,6 +9,10 @@ const hashContent = require('../utils/hash');
 const { findOrCreateClusterForPost } = require('../utils/storyClustering');
 const { getSourceId, getSourceWeight } = require('../utils/sourceRegistry');
 
+// Fly.io proxy URL for Daily Maverick
+const FLY_PROXY_DAILY_MAVERICK =
+  "https://matrix-proxy.fly.dev/proxy?url=https%3A%2F%2Fwww.dailymaverick.co.za%2Fsection%2Fnews%2Ffeed%2F";
+
 const parser = new RSSParser({
   requestOptions: {
     headers: {
@@ -22,7 +26,8 @@ const parser = new RSSParser({
 
 router.post('/dailymaverick', async (req, res) => {
   try {
-    const feed = "https://www.dailymaverick.co.za/section/news/feed/";
+    // Always use Fly.io proxy unless overridden
+    const feed = req.body.feed || FLY_PROXY_DAILY_MAVERICK;
     const tenantId = req.user.tenant_id;
 
     const sourceId = await getSourceId("Daily Maverick");
@@ -54,10 +59,20 @@ router.post('/dailymaverick', async (req, res) => {
       const topics = extractTopics(content);
       await db.insertPostTopics(post.id, topics, tenantId);
 
-      results.push({ id: post.id, external_id: item.link, sentiment, topics });
+      results.push({
+        id: post.id,
+        external_id: item.link,
+        sentiment,
+        topics
+      });
     }
 
-    res.json({ ok: true, ingested: results.length, posts: results });
+    res.json({
+      ok: true,
+      feed,
+      ingested: results.length,
+      posts: results
+    });
 
   } catch (err) {
     console.error("Daily Maverick ingestion error:", err);

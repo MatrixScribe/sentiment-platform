@@ -9,24 +9,31 @@ const hashContent = require('../utils/hash');
 const { findOrCreateClusterForPost } = require('../utils/storyClustering');
 const { getSourceId, getSourceWeight } = require('../utils/sourceRegistry');
 
+// IMPORTANT: Reuters feed now goes through Fly.io proxy
+const FLY_PROXY_REUTERS =
+  "https://matrix-proxy.fly.dev/proxy?url=https%3A%2F%2Fwww.reuters.com%2FrssFeed%2FtopNews";
+
 const parser = new RSSParser({
   headers: {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "User-Agent":
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept":
+      "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.5",
-    "Connection": "keep-alive"
-  }
+    Connection: "keep-alive",
+  },
 });
 
 router.post('/reuters', async (req, res) => {
   try {
-    const { feed = "https://www.reuters.com/rssFeed/topNews" } = req.body;
+    // Always use Fly.io proxy unless user overrides
+    const feed = req.body.feed || FLY_PROXY_REUTERS;
     const tenantId = req.user.tenant_id;
 
     const sourceId = await getSourceId("Reuters");
     const sourceWeight = await getSourceWeight(sourceId);
 
-    // Fetch RSS feed with browser headers
+    // Fetch RSS feed through Fly.io
     const feedData = await parser.parseURL(feed);
 
     const results = [];
@@ -43,9 +50,7 @@ router.post('/reuters', async (req, res) => {
         [item.link, "reuters", sourceId, content, contentHash, tenantId]
       );
 
-      if (insert.rows.length === 0) {
-        continue;
-      }
+      if (insert.rows.length === 0) continue;
 
       const post = insert.rows[0];
 
@@ -62,7 +67,7 @@ router.post('/reuters', async (req, res) => {
         id: post.id,
         external_id: item.link,
         sentiment,
-        topics
+        topics,
       });
     }
 
@@ -70,9 +75,8 @@ router.post('/reuters', async (req, res) => {
       ok: true,
       feed,
       ingested: results.length,
-      posts: results
+      posts: results,
     });
-
   } catch (err) {
     console.error("Reuters ingestion error:", err);
     res.status(500).json({ error: "Failed to ingest Reuters feed" });
