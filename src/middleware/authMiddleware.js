@@ -3,6 +3,11 @@ const jwt = require('jsonwebtoken');
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
 
 function authMiddleware(req, res, next) {
+  // Allow OPTIONS preflight to pass through
+  if (req.method === "OPTIONS") {
+    return next();
+  }
+
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -11,17 +16,17 @@ function authMiddleware(req, res, next) {
 
   const token = authHeader.split(" ")[1];
 
-  // ---------------- CRON TOKEN BYPASS ----------------
+  // CRON bypass
   if (token === process.env.CRON_TOKEN) {
     req.user = {
-      id: 0,                 // system user
-      email: "cron@system",  // not used, but required for structure
-      tenant_id: 1           // MatrixScribe system tenant
+      id: 0,
+      email: "cron@system",
+      tenant_id: 1
     };
     return next();
   }
 
-  // ---------------- NORMAL JWT AUTH ----------------
+  // Normal JWT auth
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
 
