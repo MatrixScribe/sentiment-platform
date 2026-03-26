@@ -1,95 +1,79 @@
 // src/routes/reutersIngestRoute.js
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const db = require('../db');
-const RSSParser = require('rss-parser');
-const fetch = require('node-fetch');
-const cleanXml = require('../utils/cleanXml');
-const analyzeSentiment = require('../utils/sentiment');
-const extractTopics = require('../utils/topics');
-const hashContent = require('../utils/hash');
-const { findOrCreateClusterForPost } = require('../utils/storyClustering');
-const { getSourceId, getSourceWeight } = require('../utils/sourceRegistry');
+const Parser = require("rss-parser");
+const parser = new Parser();
 
-// Fly.io proxy URL for Reuters
-const FLY_PROXY_REUTERS =
-  "https://matrix-proxy.fly.dev/proxy?url=https%3A%2F%2Fwww.reuters.com%2FrssFeed%2FtopNews";
+const db = require("../../db");
+const analyzeSentiment = require("../../utils/sentiment");
+const { getSourceId } = require("../../utils/sourceRegistry");
 
-const parser = new RSSParser({
-  defaultRSS: 2.0,
-  headers: {
-    "User-Agent": "Mozilla/5.0",
-    "Accept": "application/rss+xml, application/xml, text/xml"
-  }
-});
-
-router.post('/reuters', async (req, res) => {
+router.get("/", async (req, res) => {
   try {
-    const feed = req.body.feed || FLY_PROXY_REUTERS;
-    const tenantId = req.user.tenant_id;
+    const feedUrl =
+      "https://news.google.com/rss/search?q=site:reuters.com&hl=en-US&gl=US&ceid=US:en";
+
+    const feed = await parser.parseURL(feedUrl);
 
     const sourceId = await getSourceId("Reuters");
-    const sourceWeight = await getSourceWeight(sourceId);
 
-    // Fetch raw XML through Fly.io
-    const rawResponse = await fetch(feed, {
-      headers: {
-        "User-Agent": "Mozilla/5.0",
-        "Accept": "application/rss+xml, application/xml, text/xml"
-      }
-    });
+    let ingested = 0;
+    const posts = [];
 
-    let rawXML = await rawResponse.text();
-    rawXML = cleanXml(rawXML);
+    for (const item of feed.items) {
+      const externalId = item.link;
+      const title = item.title || "";
+      const content = title;
 
-    // Parse cleaned XML
-    const feedData = await parser.parseString(rawXML);
-
-    const results = [];
-
-    for (const item of feedData.items || []) {
-      const content = `${item.title}\n\n${item.contentSnippet || ""}`;
-      const contentHash = hashContent(content);
-
-      const insert = await db.pool.query(
-        `INSERT INTO posts (external_id, source, source_id, content, content_hash, tenant_id)
-         VALUES ($1, $2, $3, $4, $5, $6)
-         ON CONFLICT ON CONSTRAINT unique_content_hash DO NOTHING
-         RETURNING id, content, created_at`,
-        [item.link, "reuters", sourceId, content, contentHash, tenantId]
+      // dedupe
+      const exists = await db.pool.query(
+        `SELECT id FROM posts WHERE external_id = $1`,
+        [externalId]
       );
 
-      if (insert.rows.length === 0) continue;
+      if (exists.rows.length > 0) continue;
 
-      const post = insert.rows[0];
+      // sentiment
+      const { sentiment, score } = analyzeSentiment(content);
 
-      await findOrCreateClusterForPost(post.id, content, tenantId);
+      // insert post
+      const inserted = await db.pool.query(
+        `INSERT INTO posts (external_id, source, content, tenant_id, source_id)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING id`,
+        [externalId, "Reuters", content, "global", sourceId]
+      );
 
-      let sentiment = analyzeSentiment(content) * sourceWeight;
-      await db.insertSentimentResult(post.id, sentiment, tenantId);
+      const postId = inserted.rows[0].id;
 
-      const topics = extractTopics(content);
-      await db.insertPostTopics(post.id, topics, tenantId);
+      // store sentiment
+      await db.pool.query(
+        `INSERT INTO sentiment_scores (post_id, sentiment, score, tenant_id)
+         VALUES ($1, $2, $3, $4)`,
+        [postId, sentiment, score, "global"]
+      );
 
-      results.push({
-        id: post.id,
-        external_id: item.link,
+      posts.push({
+        id: postId,
+        external_id: externalId,
         sentiment,
-        topics
+        topics: []
       });
+
+      ingested++;
     }
 
     res.json({
       ok: true,
-      feed,
-      ingested: results.length,
-      posts: results
+      feed: feedUrl,
+      ingested,
+      posts
     });
-
   } catch (err) {
     console.error("Reuters ingestion error:", err);
-    res.status(500).json({ error: "Failed to ingest Reuters feed" });
+    res.status(500).json({ ok: false, error: err.message });
   }
 });
 
 module.exports = router;
+

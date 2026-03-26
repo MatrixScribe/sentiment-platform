@@ -1,38 +1,33 @@
-// src/utils/sourceRegistry.js
 const db = require("../db");
 
-/**
- * Returns the ID of a source by name.
- * Throws if the source does not exist.
- */
-async function getSourceId(sourceName) {
+async function getSourceId(name) {
   const res = await db.pool.query(
     `SELECT id FROM sources WHERE name = $1`,
-    [sourceName]
+    [name]
   );
 
   if (res.rows.length === 0) {
-    throw new Error(`Source not found in registry: ${sourceName}`);
+    throw new Error(`Source not found: ${name}`);
   }
 
   return res.rows[0].id;
 }
 
-/**
- * Returns the weight of a source by ID.
- * If weight is NULL or missing, fallback to 1.0.
- */
-async function getSourceWeight(sourceId) {
+async function getSourceMeta(id) {
   const res = await db.pool.query(
-    `SELECT weight FROM sources WHERE id = $1`,
-    [sourceId]
+    `SELECT weight, credibility, volume_normalization
+     FROM sources WHERE id = $1`,
+    [id]
   );
 
-  // Fallback ensures sentiment NEVER becomes null
-  return res.rows[0]?.weight ?? 1.0;
+  if (res.rows.length === 0) {
+    throw new Error(`Source metadata missing for id: ${id}`);
+  }
+
+  return res.rows[0];
 }
 
 module.exports = {
   getSourceId,
-  getSourceWeight
+  getSourceMeta
 };
