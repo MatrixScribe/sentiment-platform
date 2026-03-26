@@ -77,16 +77,16 @@ app.use('/api/ingest', authMiddleware, manualIngestRoute);
 app.use('/api/ingest', authMiddleware, redditIngestRoute);
 app.use('/api/ingest', authMiddleware, newsIngestRoute);
 
-// Reuters (GLOBAL WIRE)
+// GLOBAL WIRE
 app.use('/api/ingest', authMiddleware, reutersIngestRoute);
 
-// GLOBAL RSS INGEST ROUTES
+// GLOBAL RSS
 app.use('/api/ingest', authMiddleware, bbcIngestRoute);
 app.use('/api/ingest', authMiddleware, dwIngestRoute);
 app.use('/api/ingest', authMiddleware, aljazeeraIngestRoute);
 app.use('/api/ingest', authMiddleware, france24IngestRoute);
 
-// SOUTH AFRICA RSS INGEST ROUTES
+// SOUTH AFRICA RSS
 app.use('/api/ingest', authMiddleware, news24IngestRoute);
 app.use('/api/ingest', authMiddleware, dailyMaverickIngestRoute);
 app.use('/api/ingest', authMiddleware, timesliveIngestRoute);

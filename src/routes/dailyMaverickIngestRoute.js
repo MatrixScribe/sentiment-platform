@@ -1,81 +1,100 @@
-// src/routes/dailymaverickIngestRoute.js
-const express = require('express');
+// src/routes/dailyMaverickIngestRoute.js
+const express = require("express");
 const router = express.Router();
-const db = require('../db');
-const RSSParser = require('rss-parser');
-const analyzeSentiment = require('../utils/sentiment');
-const extractTopics = require('../utils/topics');
-const hashContent = require('../utils/hash');
-const { findOrCreateClusterForPost } = require('../utils/storyClustering');
-const { getSourceId, getSourceWeight } = require('../utils/sourceRegistry');
+const Parser = require("rss-parser");
+const parser = new Parser();
+const db = require("../db");
+const analyzeSentiment = require("../utils/sentiment");
+const { getSourceId } = require("../utils/sourceRegistry");
+const extractTopics = require("../utils/topicExtractor");
 
-const parser = new RSSParser({
-  defaultRSS: 2.0,
-  headers: { "User-Agent": "Mozilla/5.0" }
-});
-
-// Google News RSS for Daily Maverick
-const GOOGLE_DAILY_MAVERICK =
-  "https://news.google.com/rss/search?q=site:dailymaverick.co.za&hl=en-ZA&gl=ZA&ceid=ZA:en";
-
-router.post('/dailymaverick', async (req, res) => {
+// POST /api/ingest/dailymaverick
+router.post("/dailymaverick", async (req, res) => {
   try {
-    const feedUrl = req.body.feed || GOOGLE_DAILY_MAVERICK;
-    const tenantId = req.user.tenant_id;
+    const FEED_URL =
+      "https://news.google.com/rss/search?q=site:dailymaverick.co.za&hl=en-ZA&gl=ZA&ceid=ZA:en";
 
+    const feed = await parser.parseURL(FEED_URL);
     const sourceId = await getSourceId("Daily Maverick");
-    const sourceWeight = await getSourceWeight(sourceId);
 
-    const feed = await parser.parseURL(feedUrl);
+    let ingested = 0;
+    let posts = [];
 
-    const results = [];
+    for (const item of feed.items) {
+      const externalId = item.link;
+      const content = item.title || "";
 
-    for (const item of feed.items || []) {
-      const title = item.title || "";
-      const link = item.link || "";
-      const summary = item.contentSnippet || "";
+      // dedupe
+      const exists = await db.pool.query(
+        `SELECT id FROM posts WHERE external_id = $1`,
+        [externalId]
+      );
+      if (exists.rows.length > 0) continue;
 
-      const content = `${title}\n\n${summary}`;
-      const contentHash = hashContent(content);
+      // sentiment
+      const sentimentResult = analyzeSentiment(content);
 
-      const insert = await db.pool.query(
-        `INSERT INTO posts (external_id, source, source_id, content, content_hash, tenant_id)
-         VALUES ($1, $2, $3, $4, $5, $6)
-         ON CONFLICT ON CONSTRAINT unique_content_hash DO NOTHING
-         RETURNING id, content`,
-        [link, "dailymaverick", sourceId, content, contentHash, tenantId]
+      // insert post
+      const inserted = await db.pool.query(
+        `INSERT INTO posts (external_id, source, content, tenant_id, source_id)
+         VALUES ($1, $2, $3, 'global', $4)
+         RETURNING id`,
+        [externalId, "Daily Maverick", content, sourceId]
       );
 
-      if (insert.rows.length === 0) continue;
+      const postId = inserted.rows[0].id;
 
-      const post = insert.rows[0];
+      // sentiment_scores
+      await db.pool.query(
+        `INSERT INTO sentiment_scores (post_id, sentiment, score, tenant_id)
+         VALUES ($1, $2, $3, 'global')`,
+        [postId, sentimentResult.sentiment, sentimentResult.score]
+      );
 
-      await findOrCreateClusterForPost(post.id, content, tenantId);
-
-      const sentiment = analyzeSentiment(content) * sourceWeight;
-      await db.insertSentimentResult(post.id, sentiment, tenantId);
-
+      // topics
       const topics = extractTopics(content);
-      await db.insertPostTopics(post.id, topics, tenantId);
+      for (const topic of topics) {
+        let topicRow = await db.pool.query(
+          `SELECT id FROM topics WHERE name = $1`,
+          [topic]
+        );
 
-      results.push({
-        id: post.id,
-        external_id: link,
-        sentiment,
+        let topicId;
+        if (topicRow.rows.length === 0) {
+          const newTopic = await db.pool.query(
+            `INSERT INTO topics (name) VALUES ($1) RETURNING id`,
+            [topic]
+          );
+          topicId = newTopic.rows[0].id;
+        } else {
+          topicId = topicRow.rows[0].id;
+        }
+
+        await db.pool.query(
+          `INSERT INTO post_topics (post_id, topic_id, tenant_id)
+           VALUES ($1, $2, 'global')`,
+          [postId, topicId]
+        );
+      }
+
+      ingested++;
+      posts.push({
+        id: postId,
+        external_id: externalId,
+        sentiment: sentimentResult.score,
         topics
       });
     }
 
     res.json({
       ok: true,
-      feed: feedUrl,
-      ingested: results.length,
-      posts: results
+      feed: FEED_URL,
+      ingested,
+      posts
     });
-
   } catch (err) {
-    console.error("Daily Maverick ingestion error:", err);
-    res.status(500).json({ error: "Failed to ingest Daily Maverick (Google News RSS)" });
+    console.error("Daily Maverick ingest error:", err);
+    res.status(500).json({ ok: false, error: err.message });
   }
 });
 
