@@ -16,7 +16,7 @@ app.use(cors({
   allowedHeaders: ["Content-Type", "Authorization"]
 }));
 
-// Allow preflight to pass through without auth
+// Allow preflight to pass through without auth (Express 5 safe)
 app.options(/.*/, cors());
 
 // -------------------- ROUTES --------------------
@@ -32,12 +32,17 @@ app.use('/api/paypal/invoices', require('./routes/paypalInvoices'));
 app.use('/api/paypal/webhook', require('./routes/paypalWebhook'));
 
 // -------------------- PROTECTED ROUTES --------------------
+
+// ⭐ Unified News Insights Endpoint (NEW)
+app.use('/api/insights/news', authMiddleware, require('./routes/newsInsightsUnified'));
+
+// Existing insights routes (still available under subpaths)
 app.use('/api/insights/reddit', authMiddleware, require('./routes/redditInsights'));
-app.use('/api/insights/news', authMiddleware, require('./routes/newsInsights'));
 app.use('/api/insights/cross-source', authMiddleware, require('./routes/crossSourceInsights'));
 app.use('/api/insights/narrative', authMiddleware, require('./routes/narrativeShiftInsights'));
 app.use('/api/insights/narrative/alerts-store', authMiddleware, require('./routes/narrativeAlerts'));
 
+// Process + Analytics
 app.use('/api/process', authMiddleware, require('./routes/processRoute'));
 app.use('/api/analytics', authMiddleware, require('./routes/analyticsRoute'));
 
