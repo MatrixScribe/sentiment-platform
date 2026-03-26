@@ -17,7 +17,7 @@ app.use(cors({
 }));
 
 // Allow preflight to pass through without auth
-app.options("*", cors());
+app.options(/.*/, cors());
 
 // -------------------- ROUTES --------------------
 
