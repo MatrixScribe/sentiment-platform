@@ -8,7 +8,7 @@ const analyzeSentiment = require("../utils/sentiment");
 const { getSourceId } = require("../utils/sourceRegistry");
 const extractTopics = require("../utils/topicExtractor");
 
-router.post("/ingest/reuters", async (req, res) => {
+router.post("/reuters", async (req, res) => {
   try {
     const FEED_URL =
       "https://news.google.com/rss/search?q=site:reuters.com&hl=en-US&gl=US&ceid=US:en";
@@ -23,17 +23,14 @@ router.post("/ingest/reuters", async (req, res) => {
       const externalId = item.link;
       const content = item.title || "";
 
-      // dedupe
       const exists = await db.pool.query(
         `SELECT id FROM posts WHERE external_id = $1`,
         [externalId]
       );
       if (exists.rows.length > 0) continue;
 
-      // sentiment
       const sentimentResult = analyzeSentiment(content);
 
-      // insert post
       const inserted = await db.pool.query(
         `INSERT INTO posts (external_id, source, content, tenant_id, source_id)
          VALUES ($1, $2, $3, 'global', $4)
@@ -43,14 +40,12 @@ router.post("/ingest/reuters", async (req, res) => {
 
       const postId = inserted.rows[0].id;
 
-      // sentiment_scores
       await db.pool.query(
         `INSERT INTO sentiment_scores (post_id, sentiment, score, tenant_id)
          VALUES ($1, $2, $3, 'global')`,
         [postId, sentimentResult.sentiment, sentimentResult.score]
       );
 
-      // topics
       const topics = extractTopics(content);
       for (const topic of topics) {
         let topicRow = await db.pool.query(
