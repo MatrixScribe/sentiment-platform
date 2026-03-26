@@ -39,12 +39,12 @@ router.post('/news24', async (req, res) => {
       const contentHash = hashContent(content);
 
       const insert = await db.pool.query(
-        `INSERT INTO posts (external_id, source, source_id, content, content_hash, tenant_id)
-         VALUES ($1, $2, $3, $4, $5, $6)
-         ON CONFLICT ON CONSTRAINT unique_post_source DO NOTHING
-         RETURNING id, content`,
-        [link, "news24", sourceId, content, contentHash, tenantId]
-      );
+  `INSERT INTO posts (external_id, source, source_id, content, content_hash, tenant_id)
+   VALUES ($1, $2, $3, $4, $5, $6)
+   ON CONFLICT ON CONSTRAINT unique_content_hash DO NOTHING
+   RETURNING id, content`,
+  [link, "news24", sourceId, content, contentHash, tenantId]
+);
 
       if (insert.rows.length === 0) continue;
 
