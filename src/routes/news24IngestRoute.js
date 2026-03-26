@@ -3,6 +3,8 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const RSSParser = require('rss-parser');
+const fetch = require('node-fetch');
+const cleanXml = require('../utils/cleanXml');
 const analyzeSentiment = require('../utils/sentiment');
 const extractTopics = require('../utils/topics');
 const hashContent = require('../utils/hash');
@@ -14,27 +16,34 @@ const FLY_PROXY_NEWS24 =
   "https://matrix-proxy.fly.dev/proxy?url=https%3A%2F%2Ffeeds.news24.com%2Farticles%2Fnews24%2Ftopstories%2Frss";
 
 const parser = new RSSParser({
-  requestOptions: {
-    headers: {
-      "User-Agent": "Mozilla/5.0",
-      "Accept": "application/rss+xml, application/xml, text/xml"
-    },
-    redirect: "follow",
-    compress: false
+  defaultRSS: 2.0,
+  headers: {
+    "User-Agent": "Mozilla/5.0",
+    "Accept": "application/rss+xml, application/xml, text/xml"
   }
 });
 
 router.post('/news24', async (req, res) => {
   try {
-    // Always use Fly.io proxy unless overridden
     const feed = req.body.feed || FLY_PROXY_NEWS24;
     const tenantId = req.user.tenant_id;
 
     const sourceId = await getSourceId("News24");
     const sourceWeight = await getSourceWeight(sourceId);
 
-    // Parse RSS directly through Fly.io (no XML cleaning needed)
-    const feedData = await parser.parseURL(feed);
+    // Fetch raw XML through Fly.io
+    const rawResponse = await fetch(feed, {
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/rss+xml, application/xml, text/xml"
+      }
+    });
+
+    let rawXML = await rawResponse.text();
+    rawXML = cleanXml(rawXML);
+
+    // Parse cleaned XML
+    const feedData = await parser.parseString(rawXML);
 
     const results = [];
 
@@ -53,6 +62,7 @@ router.post('/news24', async (req, res) => {
       if (insert.rows.length === 0) continue;
 
       const post = insert.rows[0];
+
       await findOrCreateClusterForPost(post.id, content, tenantId);
 
       let sentiment = analyzeSentiment(content) * sourceWeight;

@@ -3,6 +3,8 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const RSSParser = require('rss-parser');
+const fetch = require('node-fetch');
+const cleanXml = require('../utils/cleanXml');
 const analyzeSentiment = require('../utils/sentiment');
 const extractTopics = require('../utils/topics');
 const hashContent = require('../utils/hash');
@@ -11,32 +13,41 @@ const { getSourceId, getSourceWeight } = require('../utils/sourceRegistry');
 
 // Fly.io proxy URL for TimesLIVE
 const FLY_PROXY_TIMESLIVE =
-  "https://matrix-proxy.fly.dev/proxy?url=https%3A%2F%2Fwww.timeslive.co.za%2Frss%2F";
+  "https://matrix-proxy.fly.dev/proxy?url=https%3A%2F%2Fwww.timeslive.co.za%2Frss%2F%3Fpublication%3Dtimes-live";
 
 const parser = new RSSParser({
-  requestOptions: {
-    headers: {
-      "User-Agent": "Mozilla/5.0",
-      "Accept": "application/rss+xml, application/xml, text/xml"
-    },
-    redirect: "follow",
-    compress: false
+  defaultRSS: 2.0,
+  headers: {
+    "User-Agent": "Mozilla/5.0",
+    "Accept": "application/rss+xml, application/xml, text/xml"
   }
 });
 
 router.post('/timeslive', async (req, res) => {
   try {
-    // Always use Fly.io proxy unless overridden
     const feed = req.body.feed || FLY_PROXY_TIMESLIVE;
     const tenantId = req.user.tenant_id;
 
     const sourceId = await getSourceId("TimesLIVE");
     const sourceWeight = await getSourceWeight(sourceId);
 
-    const feedData = await parser.parseURL(feed);
+    // Fetch raw XML through Fly.io
+    const rawResponse = await fetch(feed, {
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/rss+xml, application/xml, text/xml"
+      }
+    });
+
+    let rawXML = await rawResponse.text();
+    rawXML = cleanXml(rawXML);
+
+    // Parse cleaned XML
+    const feedData = await parser.parseString(rawXML);
+
     const results = [];
 
-    for (const item of feedData.items) {
+    for (const item of feedData.items || []) {
       const content = `${item.title}\n\n${item.contentSnippet || ""}`;
       const contentHash = hashContent(content);
 
@@ -51,6 +62,7 @@ router.post('/timeslive', async (req, res) => {
       if (insert.rows.length === 0) continue;
 
       const post = insert.rows[0];
+
       await findOrCreateClusterForPost(post.id, content, tenantId);
 
       let sentiment = analyzeSentiment(content) * sourceWeight;

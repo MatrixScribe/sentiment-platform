@@ -3,42 +3,51 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const RSSParser = require('rss-parser');
+const fetch = require('node-fetch');
+const cleanXml = require('../utils/cleanXml');
 const analyzeSentiment = require('../utils/sentiment');
 const extractTopics = require('../utils/topics');
 const hashContent = require('../utils/hash');
 const { findOrCreateClusterForPost } = require('../utils/storyClustering');
 const { getSourceId, getSourceWeight } = require('../utils/sourceRegistry');
 
-// IMPORTANT: Reuters feed now goes through Fly.io proxy
+// Fly.io proxy URL for Reuters
 const FLY_PROXY_REUTERS =
   "https://matrix-proxy.fly.dev/proxy?url=https%3A%2F%2Fwww.reuters.com%2FrssFeed%2FtopNews";
 
 const parser = new RSSParser({
+  defaultRSS: 2.0,
   headers: {
-    "User-Agent":
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Accept":
-      "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.5",
-    Connection: "keep-alive",
-  },
+    "User-Agent": "Mozilla/5.0",
+    "Accept": "application/rss+xml, application/xml, text/xml"
+  }
 });
 
 router.post('/reuters', async (req, res) => {
   try {
-    // Always use Fly.io proxy unless user overrides
     const feed = req.body.feed || FLY_PROXY_REUTERS;
     const tenantId = req.user.tenant_id;
 
     const sourceId = await getSourceId("Reuters");
     const sourceWeight = await getSourceWeight(sourceId);
 
-    // Fetch RSS feed through Fly.io
-    const feedData = await parser.parseURL(feed);
+    // Fetch raw XML through Fly.io
+    const rawResponse = await fetch(feed, {
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/rss+xml, application/xml, text/xml"
+      }
+    });
+
+    let rawXML = await rawResponse.text();
+    rawXML = cleanXml(rawXML);
+
+    // Parse cleaned XML
+    const feedData = await parser.parseString(rawXML);
 
     const results = [];
 
-    for (const item of feedData.items) {
+    for (const item of feedData.items || []) {
       const content = `${item.title}\n\n${item.contentSnippet || ""}`;
       const contentHash = hashContent(content);
 
@@ -56,8 +65,7 @@ router.post('/reuters', async (req, res) => {
 
       await findOrCreateClusterForPost(post.id, content, tenantId);
 
-      let sentiment = analyzeSentiment(content);
-      sentiment = sentiment * sourceWeight;
+      let sentiment = analyzeSentiment(content) * sourceWeight;
       await db.insertSentimentResult(post.id, sentiment, tenantId);
 
       const topics = extractTopics(content);
@@ -67,7 +75,7 @@ router.post('/reuters', async (req, res) => {
         id: post.id,
         external_id: item.link,
         sentiment,
-        topics,
+        topics
       });
     }
 
@@ -75,8 +83,9 @@ router.post('/reuters', async (req, res) => {
       ok: true,
       feed,
       ingested: results.length,
-      posts: results,
+      posts: results
     });
+
   } catch (err) {
     console.error("Reuters ingestion error:", err);
     res.status(500).json({ error: "Failed to ingest Reuters feed" });

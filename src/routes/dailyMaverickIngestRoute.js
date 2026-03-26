@@ -3,40 +3,51 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const RSSParser = require('rss-parser');
+const fetch = require('node-fetch');
+const cleanXml = require('../utils/cleanXml');
 const analyzeSentiment = require('../utils/sentiment');
 const extractTopics = require('../utils/topics');
 const hashContent = require('../utils/hash');
 const { findOrCreateClusterForPost } = require('../utils/storyClustering');
 const { getSourceId, getSourceWeight } = require('../utils/sourceRegistry');
 
-// Fly.io proxy URL for Daily Maverick
-const FLY_PROXY_DAILY_MAVERICK =
+// Fly.io proxy URL
+const FLY_PROXY_DM =
   "https://matrix-proxy.fly.dev/proxy?url=https%3A%2F%2Fwww.dailymaverick.co.za%2Fsection%2Fnews%2Ffeed%2F";
 
 const parser = new RSSParser({
-  requestOptions: {
-    headers: {
-      "User-Agent": "Mozilla/5.0",
-      "Accept": "application/rss+xml, application/xml, text/xml"
-    },
-    redirect: "follow",
-    compress: false
+  defaultRSS: 2.0,
+  headers: {
+    "User-Agent": "Mozilla/5.0",
+    "Accept": "application/rss+xml, application/xml, text/xml"
   }
 });
 
 router.post('/dailymaverick', async (req, res) => {
   try {
-    // Always use Fly.io proxy unless overridden
-    const feed = req.body.feed || FLY_PROXY_DAILY_MAVERICK;
+    const feed = req.body.feed || FLY_PROXY_DM;
     const tenantId = req.user.tenant_id;
 
     const sourceId = await getSourceId("Daily Maverick");
     const sourceWeight = await getSourceWeight(sourceId);
 
-    const feedData = await parser.parseURL(feed);
+    // Fetch raw XML
+    const rawResponse = await fetch(feed, {
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/rss+xml, application/xml, text/xml"
+      }
+    });
+
+    let rawXML = await rawResponse.text();
+    rawXML = cleanXml(rawXML);
+
+    // Parse cleaned XML
+    const feedData = await parser.parseString(rawXML);
+
     const results = [];
 
-    for (const item of feedData.items) {
+    for (const item of feedData.items || []) {
       const content = `${item.title}\n\n${item.contentSnippet || ""}`;
       const contentHash = hashContent(content);
 
@@ -51,6 +62,7 @@ router.post('/dailymaverick', async (req, res) => {
       if (insert.rows.length === 0) continue;
 
       const post = insert.rows[0];
+
       await findOrCreateClusterForPost(post.id, content, tenantId);
 
       let sentiment = analyzeSentiment(content) * sourceWeight;
