@@ -3,60 +3,47 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const RSSParser = require('rss-parser');
-const fetch = require('node-fetch');
-const cleanXml = require('../utils/cleanXml');
 const analyzeSentiment = require('../utils/sentiment');
 const extractTopics = require('../utils/topics');
 const hashContent = require('../utils/hash');
 const { findOrCreateClusterForPost } = require('../utils/storyClustering');
 const { getSourceId, getSourceWeight } = require('../utils/sourceRegistry');
 
-// Fly.io proxy URL for IOL
-const FLY_PROXY_IOL =
-  "https://matrix-proxy.fly.dev/proxy?url=https%3A%2F%2Fwww.iol.co.za%2Fcmlink%2F1.640";
-
 const parser = new RSSParser({
   defaultRSS: 2.0,
-  headers: {
-    "User-Agent": "Mozilla/5.0",
-    "Accept": "application/rss+xml, application/xml, text/xml"
-  }
+  headers: { "User-Agent": "Mozilla/5.0" }
 });
+
+// Google News RSS for IOL
+const GOOGLE_IOL =
+  "https://news.google.com/rss/search?q=site:iol.co.za&hl=en-ZA&gl=ZA&ceid=ZA:en";
 
 router.post('/iol', async (req, res) => {
   try {
-    const feed = req.body.feed || FLY_PROXY_IOL;
+    const feedUrl = req.body.feed || GOOGLE_IOL;
     const tenantId = req.user.tenant_id;
 
     const sourceId = await getSourceId("IOL");
     const sourceWeight = await getSourceWeight(sourceId);
 
-    // Fetch raw XML through Fly.io
-    const rawResponse = await fetch(feed, {
-      headers: {
-        "User-Agent": "Mozilla/5.0",
-        "Accept": "application/rss+xml, application/xml, text/xml"
-      }
-    });
-
-    let rawXML = await rawResponse.text();
-    rawXML = cleanXml(rawXML);
-
-    // Parse cleaned XML
-    const feedData = await parser.parseString(rawXML);
+    const feed = await parser.parseURL(feedUrl);
 
     const results = [];
 
-    for (const item of feedData.items || []) {
-      const content = `${item.title}\n\n${item.contentSnippet || ""}`;
+    for (const item of feed.items || []) {
+      const title = item.title || "";
+      const link = item.link || "";
+      const summary = item.contentSnippet || "";
+
+      const content = `${title}\n\n${summary}`;
       const contentHash = hashContent(content);
 
       const insert = await db.pool.query(
         `INSERT INTO posts (external_id, source, source_id, content, content_hash, tenant_id)
          VALUES ($1, $2, $3, $4, $5, $6)
-         ON CONFLICT ON CONSTRAINT unique_post_source DO NOTHING
+         ON CONFLICT ON CONSTRAINT unique_content_hash DO NOTHING
          RETURNING id, content`,
-        [item.link, "iol", sourceId, content, contentHash, tenantId]
+        [link, "iol", sourceId, content, contentHash, tenantId]
       );
 
       if (insert.rows.length === 0) continue;
@@ -65,7 +52,7 @@ router.post('/iol', async (req, res) => {
 
       await findOrCreateClusterForPost(post.id, content, tenantId);
 
-      let sentiment = analyzeSentiment(content) * sourceWeight;
+      const sentiment = analyzeSentiment(content) * sourceWeight;
       await db.insertSentimentResult(post.id, sentiment, tenantId);
 
       const topics = extractTopics(content);
@@ -73,7 +60,7 @@ router.post('/iol', async (req, res) => {
 
       results.push({
         id: post.id,
-        external_id: item.link,
+        external_id: link,
         sentiment,
         topics
       });
@@ -81,14 +68,14 @@ router.post('/iol', async (req, res) => {
 
     res.json({
       ok: true,
-      feed,
+      feed: feedUrl,
       ingested: results.length,
       posts: results
     });
 
   } catch (err) {
     console.error("IOL ingestion error:", err);
-    res.status(500).json({ error: "Failed to ingest IOL feed" });
+    res.status(500).json({ error: "Failed to ingest IOL (Google News RSS)" });
   }
 });
 
