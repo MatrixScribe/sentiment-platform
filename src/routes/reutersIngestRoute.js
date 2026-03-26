@@ -8,12 +8,12 @@ const analyzeSentiment = require("../utils/sentiment");
 const { getSourceId } = require("../utils/sourceRegistry");
 const extractTopics = require("../utils/topicExtractor");
 
-router.get("/ingest/reuters", async (req, res) => {
+router.post("/ingest/reuters", async (req, res) => {
   try {
-    const FEED_URL = "https://news.google.com/rss/search?q=site:reuters.com&hl=en-US&gl=US&ceid=US:en";
+    const FEED_URL =
+      "https://news.google.com/rss/search?q=site:reuters.com&hl=en-US&gl=US&ceid=US:en";
 
     const feed = await parser.parseURL(FEED_URL);
-
     const sourceId = await getSourceId("Reuters");
 
     let ingested = 0;
@@ -77,7 +77,12 @@ router.get("/ingest/reuters", async (req, res) => {
       }
 
       ingested++;
-      posts.push({ id: postId, external_id: externalId, sentiment: sentimentResult.score, topics });
+      posts.push({
+        id: postId,
+        external_id: externalId,
+        sentiment: sentimentResult.score,
+        topics
+      });
     }
 
     res.json({
@@ -86,7 +91,6 @@ router.get("/ingest/reuters", async (req, res) => {
       ingested,
       posts
     });
-
   } catch (err) {
     console.error("Reuters ingest error:", err);
     res.status(500).json({ ok: false, error: err.message });
