@@ -33,6 +33,9 @@ app.use('/api/paypal/webhook', require('./routes/paypalWebhook'));
 
 // -------------------- PROTECTED ROUTES --------------------
 
+// ⭐ NEW: Entity Scorecard Route (20‑module foundation)
+app.use('/api/entity', authMiddleware, require('./routes/entityRoute'));
+
 // ⭐ Unified News Insights Endpoint (NEW)
 app.use('/api/insights/news', authMiddleware, require('./routes/newsInsightsUnified'));
 
