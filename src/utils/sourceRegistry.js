@@ -2,70 +2,76 @@
 const db = require("../db");
 
 /**
- * Fetch source ID by name.
- * Example: getSourceId("BBC") → 1
+ * Normalize input:
+ * - If number → treat as ID
+ * - If string → treat as name
  */
-async function getSourceId(name) {
-  const res = await db.pool.query(
-    `SELECT id FROM sources WHERE name = $1`,
-    [name]
-  );
+async function resolveSource(input) {
+  if (!input) throw new Error("Source key missing");
 
-  if (res.rows.length === 0) {
-    throw new Error(`Source not found: ${name}`);
+  // If numeric → treat as ID
+  if (!isNaN(input)) {
+    const res = await db.pool.query(
+      `SELECT id, name, weight, credibility, volume_normalization
+       FROM sources WHERE id = $1`,
+      [Number(input)]
+    );
+
+    if (res.rows.length === 0) {
+      throw new Error(`Source not found by ID: ${input}`);
+    }
+
+    return res.rows[0];
   }
 
-  return res.rows[0].id;
-}
-
-/**
- * Fetch full metadata for a source.
- * Includes: weight, credibility, volume_normalization
- */
-async function getSourceMeta(id) {
+  // If string → treat as name
   const res = await db.pool.query(
-    `SELECT weight, credibility, volume_normalization
-     FROM sources WHERE id = $1`,
-    [id]
+    `SELECT id, name, weight, credibility, volume_normalization
+     FROM sources WHERE name = $1`,
+    [input]
   );
 
   if (res.rows.length === 0) {
-    throw new Error(`Source metadata missing for id: ${id}`);
+    throw new Error(`Source not found by name: ${input}`);
   }
 
   return res.rows[0];
 }
 
 /**
- * Return only the weight multiplier.
+ * Return numeric ID
  */
-async function getSourceWeight(name) {
-  const id = await getSourceId(name);
-  const meta = await getSourceMeta(id);
-  return meta.weight || 1.0;
+async function getSourceId(input) {
+  const src = await resolveSource(input);
+  return src.id;
 }
 
 /**
- * Return credibility score (optional future use).
+ * Return weight multiplier
  */
-async function getSourceCredibility(name) {
-  const id = await getSourceId(name);
-  const meta = await getSourceMeta(id);
-  return meta.credibility || 1.0;
+async function getSourceWeight(input) {
+  const src = await resolveSource(input);
+  return src.weight || 1.0;
 }
 
 /**
- * Return volume normalization factor (optional future use).
+ * Return credibility score
  */
-async function getSourceVolumeNormalization(name) {
-  const id = await getSourceId(name);
-  const meta = await getSourceMeta(id);
-  return meta.volume_normalization || 1.0;
+async function getSourceCredibility(input) {
+  const src = await resolveSource(input);
+  return src.credibility || 1.0;
+}
+
+/**
+ * Return volume normalization factor
+ */
+async function getSourceVolumeNormalization(input) {
+  const src = await resolveSource(input);
+  return src.volume_normalization || 1.0;
 }
 
 module.exports = {
   getSourceId,
-  getSourceMeta,
   getSourceWeight,
   getSourceCredibility,
   getSourceVolumeNormalization
