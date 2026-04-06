@@ -7,6 +7,7 @@ const db = require("../db");
 const analyzeSentiment = require("../utils/sentiment");
 const { getSourceId } = require("../utils/sourceRegistry");
 const extractTopics = require("../utils/topicExtractor");
+const analyze = require("../services/analyzeService");
 
 // POST /api/ingest/iol
 router.post("/iol", async (req, res) => {
@@ -44,6 +45,25 @@ router.post("/iol", async (req, res) => {
 
       const postId = inserted.rows[0].id;
 
+      // unified analysis
+      const analysis = await analyze(content);
+
+      if (analysis.entity) {
+        await db.pool.query(
+          `UPDATE posts
+           SET entity_id = $1,
+               entity_type = $2,
+               entity_confidence = $3
+           WHERE id = $4`,
+          [
+            analysis.entity.id || null,
+            analysis.entityType || null,
+            analysis.confidence || null,
+            postId
+          ]
+        );
+      }
+
       // sentiment_scores
       await db.pool.query(
         `INSERT INTO sentiment_scores (post_id, sentiment, score, tenant_id)
@@ -75,6 +95,17 @@ router.post("/iol", async (req, res) => {
            VALUES ($1, $2, 'global')`,
           [postId, topicId]
         );
+      }
+
+      // tags
+      if (Array.isArray(analysis.tags) && analysis.tags.length > 0) {
+        for (const tag of analysis.tags) {
+          await db.pool.query(
+            `INSERT INTO post_tags (post_id, tag, tenant_id)
+             VALUES ($1, $2, 'global')`,
+            [postId, tag]
+          );
+        }
       }
 
       ingested++;

@@ -7,6 +7,7 @@ const db = require("../db");
 const analyzeSentiment = require("../utils/sentiment");
 const { getSourceId } = require("../utils/sourceRegistry");
 const extractTopics = require("../utils/topicExtractor");
+const analyze = require("../services/analyzeService");
 
 // POST /api/ingest/news24
 router.post("/news24", async (req, res) => {
@@ -31,7 +32,7 @@ router.post("/news24", async (req, res) => {
       );
       if (exists.rows.length > 0) continue;
 
-      // sentiment
+      // sentiment (existing util)
       const sentimentResult = analyzeSentiment(content);
 
       // insert post
@@ -44,14 +45,34 @@ router.post("/news24", async (req, res) => {
 
       const postId = inserted.rows[0].id;
 
-      // sentiment_scores
+      // unified analysis (entity + tags + extra intelligence)
+      const analysis = await analyze(content);
+
+      // update post with entity info
+      if (analysis.entity) {
+        await db.pool.query(
+          `UPDATE posts
+           SET entity_id = $1,
+               entity_type = $2,
+               entity_confidence = $3
+           WHERE id = $4`,
+          [
+            analysis.entity.id || null,
+            analysis.entityType || null,
+            analysis.confidence || null,
+            postId
+          ]
+        );
+      }
+
+      // sentiment_scores (existing pattern)
       await db.pool.query(
         `INSERT INTO sentiment_scores (post_id, sentiment, score, tenant_id)
          VALUES ($1, $2, $3, 'global')`,
         [postId, sentimentResult.sentiment, sentimentResult.score]
       );
 
-      // topics
+      // topics (existing util)
       const topics = extractTopics(content);
       for (const topic of topics) {
         let topicRow = await db.pool.query(
@@ -75,6 +96,17 @@ router.post("/news24", async (req, res) => {
            VALUES ($1, $2, 'global')`,
           [postId, topicId]
         );
+      }
+
+      // tags (new)
+      if (Array.isArray(analysis.tags) && analysis.tags.length > 0) {
+        for (const tag of analysis.tags) {
+          await db.pool.query(
+            `INSERT INTO post_tags (post_id, tag, tenant_id)
+             VALUES ($1, $2, 'global')`,
+            [postId, tag]
+          );
+        }
       }
 
       ingested++;

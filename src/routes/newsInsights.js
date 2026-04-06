@@ -10,7 +10,7 @@ const {
   newsDailySummaryTransform
 } = require("../utils/newsTransformers");
 
-// ---------------- DAILY NEWS SUMMARY ----------------
+// DAILY
 router.get("/daily", async (req, res) => {
   try {
     const result = await pool.query(`
@@ -29,7 +29,7 @@ router.get("/daily", async (req, res) => {
   }
 });
 
-// ---------------- WEEKLY NEWS SUMMARY ----------------
+// WEEKLY
 router.get("/weekly", async (req, res) => {
   try {
     const result = await pool.query(`
@@ -48,7 +48,7 @@ router.get("/weekly", async (req, res) => {
   }
 });
 
-// ---------------- SENTIMENT TREND (Line Chart) ----------------
+// SENTIMENT TREND
 router.get("/sentiment-trend/:source", async (req, res) => {
   const { source } = req.params;
 
@@ -72,7 +72,7 @@ router.get("/sentiment-trend/:source", async (req, res) => {
   }
 });
 
-// ---------------- TOP ENTITIES (Word Cloud / Bar Chart) ----------------
+// TOP ENTITIES
 router.get("/top-entities/:source", async (req, res) => {
   const { source } = req.params;
 
@@ -97,7 +97,7 @@ router.get("/top-entities/:source", async (req, res) => {
   }
 });
 
-// ---------------- SOURCE COMPARISON (Stacked Bar) ----------------
+// SOURCE COMPARISON
 router.get("/compare", async (req, res) => {
   try {
     const result = await pool.query(`
@@ -112,6 +112,29 @@ router.get("/compare", async (req, res) => {
       data: newsSourceComparisonTransform(result.rows)
     });
   } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// NEW: HIGH‑LEVEL INSIGHTS
+router.get("/insights", async (req, res) => {
+  try {
+    const result = await pool.query(
+      `
+      SELECT *
+      FROM insights
+      WHERE tenant_id = 'global'
+      ORDER BY date DESC
+      LIMIT 50
+      `
+    );
+
+    res.json({
+      success: true,
+      data: result.rows
+    });
+  } catch (err) {
+    console.error("newsInsights /insights error:", err);
     res.status(500).json({ success: false, error: err.message });
   }
 });

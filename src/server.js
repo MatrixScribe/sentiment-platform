@@ -9,14 +9,12 @@ const authMiddleware = require('./middleware/authMiddleware');
 // -------------------- GLOBAL MIDDLEWARE --------------------
 app.use(express.json());
 
-// CORS (must come BEFORE routes)
 app.use(cors({
   origin: "*",
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"]
 }));
 
-// Allow preflight to pass through without auth (Express 5 safe)
 app.options(/.*/, cors());
 
 // -------------------- ROUTES --------------------
@@ -33,13 +31,15 @@ app.use('/api/paypal/webhook', require('./routes/paypalWebhook'));
 
 // -------------------- PROTECTED ROUTES --------------------
 
+// ⭐ NEW: Real‑time AI Entity Detection Route
+app.use('/api/entities', authMiddleware, require('./routes/entityDetectRoute'));
+
 // ⭐ NEW: Entity Scorecard Route (20‑module foundation)
 app.use('/api/entity', authMiddleware, require('./routes/entityRoute'));
 
 // ⭐ Unified News Insights Endpoint (NEW)
 app.use('/api/insights/news', authMiddleware, require('./routes/newsInsightsUnified'));
 
-// Existing insights routes (still available under subpaths)
 app.use('/api/insights/reddit', authMiddleware, require('./routes/redditInsights'));
 app.use('/api/insights/cross-source', authMiddleware, require('./routes/crossSourceInsights'));
 app.use('/api/insights/narrative', authMiddleware, require('./routes/narrativeShiftInsights'));

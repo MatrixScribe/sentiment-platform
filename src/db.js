@@ -2,12 +2,27 @@
 const { Pool } = require('pg');
 require('dotenv').config();
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false
-  }
-});
+const isProduction = process.env.NODE_ENV === "production";
+
+let pool;
+
+if (isProduction && process.env.DATABASE_URL) {
+  // Render / Cloud Postgres
+  pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false }
+  });
+} else {
+  // Local Postgres using DB_* variables
+  pool = new Pool({
+    host: process.env.DB_HOST || "localhost",
+    port: process.env.DB_PORT || 5432,
+    user: process.env.DB_USER || "postgres",
+    password: process.env.DB_PASSWORD || "",
+    database: process.env.DB_NAME || "sentiment_db",
+    ssl: false
+  });
+}
 
 module.exports = {
   pool,
@@ -178,5 +193,38 @@ module.exports = {
       [id]
     );
     return res.rows[0];
+  },
+
+  // ---------------- ENTITY HELPERS ----------------
+
+  async getAllEntities() {
+    const res = await pool.query(`SELECT id, slug, name FROM entities`);
+    return res.rows;
+  },
+
+  // ⭐ NEW: Fetch entities with descriptions (for GPT‑4o)
+  async getAllEntitiesWithDescriptions() {
+    const res = await pool.query(`
+      SELECT id, name, slug, description
+      FROM entities
+    `);
+    return res.rows;
+  },
+
+  // ⭐ NEW: Fetch posts missing entity assignment
+  async getPostsWithoutEntity() {
+    const res = await pool.query(`
+      SELECT id, content
+      FROM posts
+      WHERE entity_id IS NULL
+    `);
+    return res.rows;
+  },
+
+  async updatePostEntity(postId, entityId) {
+    await pool.query(
+      `UPDATE posts SET entity_id = $1 WHERE id = $2`,
+      [entityId, postId]
+    );
   }
 };

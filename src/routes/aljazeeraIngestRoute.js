@@ -8,6 +8,7 @@ const extractTopics = require('../utils/topics');
 const hashContent = require('../utils/hash');
 const { findOrCreateClusterForPost } = require('../utils/storyClustering');
 const { getSourceId, getSourceWeight } = require('../utils/sourceRegistry');
+const analyze = require("../services/analyzeService");
 
 const parser = new RSSParser({
   requestOptions: {
@@ -50,11 +51,43 @@ router.post('/aljazeera', async (req, res) => {
 
       await findOrCreateClusterForPost(post.id, content, tenantId);
 
+      // unified analysis
+      const analysis = await analyze(content);
+
+      if (analysis.entity) {
+        await db.pool.query(
+          `UPDATE posts
+           SET entity_id = $1,
+               entity_type = $2,
+               entity_confidence = $3
+           WHERE id = $4`,
+          [
+            analysis.entity.id || null,
+            analysis.entityType || null,
+            analysis.confidence || null,
+            post.id
+          ]
+        );
+      }
+
+      // existing sentiment logic (weighted)
       let sentiment = analyzeSentiment(content) * sourceWeight;
       await db.insertSentimentResult(post.id, sentiment, tenantId);
 
+      // existing topics logic
       const topics = extractTopics(content);
       await db.insertPostTopics(post.id, topics, tenantId);
+
+      // tags
+      if (Array.isArray(analysis.tags) && analysis.tags.length > 0) {
+        for (const tag of analysis.tags) {
+          await db.pool.query(
+            `INSERT INTO post_tags (post_id, tag, tenant_id)
+             VALUES ($1, $2, $3)`,
+            [post.id, tag, tenantId]
+          );
+        }
+      }
 
       results.push({ id: post.id, external_id: item.link, sentiment, topics });
     }

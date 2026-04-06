@@ -8,6 +8,7 @@ const extractTopics = require('../utils/topics');
 const hashContent = require('../utils/hash');
 const { findOrCreateClusterForPost } = require('../utils/storyClustering');
 const { getSourceId, getSourceWeight } = require('../utils/sourceRegistry');
+const analyze = require("../services/analyzeService");
 
 const parser = new RSSParser({
   requestOptions: {
@@ -38,12 +39,12 @@ router.post('/bbc', async (req, res) => {
       const contentHash = hashContent(content);
 
       const insert = await db.pool.query(
-  `INSERT INTO posts (external_id, source, source_id, content, content_hash, tenant_id)
-   VALUES ($1, $2, $3, $4, $5, $6)
-   ON CONFLICT ON CONSTRAINT unique_post_source DO NOTHING
-   RETURNING id, content`,
-  [item.link, "bbc", sourceId, content, contentHash, tenantId]
-);
+        `INSERT INTO posts (external_id, source, source_id, content, content_hash, tenant_id)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT ON CONSTRAINT unique_post_source DO NOTHING
+         RETURNING id, content`,
+        [item.link, "bbc", sourceId, content, contentHash, tenantId]
+      );
 
       if (insert.rows.length === 0) continue;
 
@@ -51,11 +52,44 @@ router.post('/bbc', async (req, res) => {
 
       await findOrCreateClusterForPost(post.id, content, tenantId);
 
-      let sentiment = analyzeSentiment(content) * sourceWeight;
+      // unified analysis
+      const analysis = await analyze(content);
+
+      if (analysis.entity) {
+        await db.pool.query(
+          `UPDATE posts
+           SET entity_id = $1,
+               entity_type = $2,
+               entity_confidence = $3
+           WHERE id = $4`,
+          [
+            analysis.entity.id || null,
+            analysis.entityType || null,
+            analysis.confidence || null,
+            post.id
+          ]
+        );
+      }
+
+      // existing sentiment logic (weighted)
+      let sentiment = analyzeSentiment(content);
+      sentiment = sentiment * sourceWeight;
       await db.insertSentimentResult(post.id, sentiment, tenantId);
 
+      // existing topics logic
       const topics = extractTopics(content);
       await db.insertPostTopics(post.id, topics, tenantId);
+
+      // tags
+      if (Array.isArray(analysis.tags) && analysis.tags.length > 0) {
+        for (const tag of analysis.tags) {
+          await db.pool.query(
+            `INSERT INTO post_tags (post_id, tag, tenant_id)
+             VALUES ($1, $2, $3)`,
+            [post.id, tag, tenantId]
+          );
+        }
+      }
 
       results.push({
         id: post.id,
