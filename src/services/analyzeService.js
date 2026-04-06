@@ -1,59 +1,62 @@
 // src/services/analyzeService.js
+const sentiment = require("../utils/sentiment");
+const extractTopics = require("../utils/topics");
+const extractTags = require("../utils/tags");
+const { detectEntityAI } = require("../ai/entityClassifier");
+const db = require("../db");
 
-const nlpService = require("./nlpService");
-const sentimentService = require("./sentimentService");
-const topicService = require("./topicService");
-const tagger = require("../tagging/tagger");
-const entityClassifier = require("../ai/entityClassifier");
-const { resolveEntityForText } = require("../lib/entities/entityResolver");
-
-module.exports = async function analyze(content) {
-  if (!content || typeof content !== "string") {
+async function analyze(text) {
+  if (!text || text.trim().length === 0) {
     return {
-      entity: null,
       sentiment: null,
       topics: [],
       tags: [],
+      entity: null,
       entityType: null,
-      confidence: 0,
+      confidence: 0
     };
   }
 
-  // 1. Normalize text
-  const clean = nlpService.preprocess
-    ? nlpService.preprocess(content)
-    : content.trim();
+  // ---------------- SENTIMENT ----------------
+  const sentimentResult = sentiment(text); 
+  // sentimentResult = { sentiment: "positive|negative|neutral", score: number }
 
-  // 2. Entity resolution (new resolver)
-  const entityResult = await resolveEntityForText(clean, {
-    allowAutoCreate: true,
-  });
+  // ---------------- TOPICS ----------------
+  const topics = extractTopics(text); // array of strings
 
-  // 3. Sentiment analysis (old engine)
-  const sentiment = await sentimentService.analyze(clean);
+  // ---------------- TAGS ----------------
+  const tags = extractTags(text); // array of strings
 
-  // 4. Topic classification (old engine)
-  const topics = await topicService.classify(clean);
-
-  // 5. Keyword tagging (old tagger)
-  const tags = tagger.extractTags
-    ? tagger.extractTags(clean)
-    : [];
-
-  // 6. Entity type classification (old classifier)
+  // ---------------- ENTITY DETECTION (AI) ----------------
+  let entity = null;
   let entityType = null;
-  if (entityResult && entityResult.name) {
-    entityType = entityClassifier.classify
-      ? entityClassifier.classify(entityResult.name)
-      : null;
+  let confidence = 0;
+
+  try {
+    const detectedName = await detectEntityAI(text);
+
+    if (detectedName) {
+      const allEntities = await db.getAllEntities();
+      const match = allEntities.find(e => e.name.toLowerCase() === detectedName.toLowerCase());
+
+      if (match) {
+        entity = match;
+        entityType = "organization"; // placeholder
+        confidence = 0.9;
+      }
+    }
+  } catch (err) {
+    console.error("Entity detection failed:", err.message);
   }
 
   return {
-    entity: entityResult || null,
-    sentiment: sentiment || null,
-    topics: topics || [],
-    tags: tags || [],
-    entityType: entityType || null,
-    confidence: entityResult?.confidence || 0,
+    sentiment: sentimentResult,
+    topics,
+    tags,
+    entity,
+    entityType,
+    confidence
   };
-};
+}
+
+module.exports = analyze;
