@@ -2,15 +2,30 @@
 const OpenAI = require("openai");
 const db = require("../db");
 
-const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
+let client = null;
+
+// Safe initialization
+try {
+  if (!process.env.OPENAI_API_KEY) {
+    console.warn("⚠️ OPENAI_API_KEY missing — falling back to local classification.");
+  } else {
+    client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  }
+} catch (err) {
+  console.error("❌ Failed to initialize OpenAI client:", err.message);
+  client = null;
+}
 
 async function detectEntityAI(postText) {
   const entities = await db.getAllEntitiesWithDescriptions();
 
   if (!entities || entities.length === 0) {
     console.warn("⚠️ No entities found in database.");
+    return null;
+  }
+
+  // Fallback if OpenAI unavailable
+  if (!client) {
     return null;
   }
 
@@ -42,7 +57,7 @@ Return ONLY the entity name or "none".
     return entityName === "none" ? null : entityName;
 
   } catch (err) {
-    console.error("❌ GPT‑4o entity detection error:", err);
+    console.error("❌ GPT‑4o entity detection error:", err.message);
     return null;
   }
 }
