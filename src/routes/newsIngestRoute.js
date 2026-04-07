@@ -9,6 +9,12 @@ const { findOrCreateClusterForPost } = require('../utils/storyClustering');
 const { getSourceId, getSourceWeight } = require('../utils/sourceRegistry');
 const fetch = require('node-fetch');
 
+// SAFETY: Ensure API_BASE_URL is absolute
+const API_BASE = process.env.API_BASE_URL;
+if (!API_BASE || !API_BASE.startsWith("http")) {
+  console.error("❌ ERROR: API_BASE_URL is missing or invalid:", API_BASE);
+}
+
 router.post('/news', async (req, res) => {
   try {
     const { query = "south africa", limit = 5 } = req.body;
@@ -59,31 +65,38 @@ router.post('/news', async (req, res) => {
       const topics = extractTopics(content);
       await db.insertPostTopics(post.id, topics, tenantId);
 
-      // ⭐ STEP 1 — Detect entities
-      const entityResponse = await fetch(
-        `${process.env.API_BASE_URL}/api/entities`,
-        {
+      // ⭐ ENTITY DETECTION (SAFE + LOGGING)
+      let entities = [];
+      try {
+        const entityResponse = await fetch(`${API_BASE}/api/entities`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             Authorization: req.headers.authorization
           },
           body: JSON.stringify({ text: content })
-        }
-      );
+        });
 
-      const { entities } = await entityResponse.json();
+        const json = await entityResponse.json();
+        entities = json.entities || [];
+      } catch (err) {
+        console.error("❌ Entity detection failed:", err.message);
+      }
 
-      // ⭐ STEP 2 — Link post to FIRST entity
-      if (entities && entities.length > 0) {
-        await db.pool.query(
-          `UPDATE posts SET entity_id = $1 WHERE id = $2`,
-          [entities[0].id, post.id]
-        );
+      // ⭐ LINK POST → FIRST ENTITY
+      if (entities.length > 0) {
+        try {
+          await db.pool.query(
+            `UPDATE posts SET entity_id = $1 WHERE id = $2`,
+            [entities[0].id, post.id]
+          );
 
-        // ⭐ STEP 3 — Trigger enrichment
-        if (db.updateEntityScorecard) {
-          await db.updateEntityScorecard(entities[0].id);
+          // ⭐ OPTIONAL: Trigger enrichment if available
+          if (db.updateEntityScorecard) {
+            await db.updateEntityScorecard(entities[0].id);
+          }
+        } catch (err) {
+          console.error("❌ Failed to link entity:", err.message);
         }
       }
 
