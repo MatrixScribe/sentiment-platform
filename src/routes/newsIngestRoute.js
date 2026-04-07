@@ -14,7 +14,7 @@ router.post('/news', async (req, res) => {
     const { query = "south africa", limit = 5 } = req.body;
     const tenantId = req.user.tenant_id;
 
-    const sourceId = await getSourceId("News24"); // ⭐ change this per source later
+    const sourceId = await getSourceId("News24");
     const sourceWeight = await getSourceWeight(sourceId);
 
     const url = `https://newsdata.io/api/1/news?apikey=${process.env.NEWSDATA_API_KEY}&q=${encodeURIComponent(query)}&language=en&country=za&size=${limit}`;
@@ -26,7 +26,6 @@ router.post('/news', async (req, res) => {
     const data = await response.json();
 
     if (!data || !Array.isArray(data.results)) {
-      console.error("News API returned unexpected structure:", data);
       return res.status(400).json({
         error: "Invalid query or no news returned",
         details: data
@@ -47,20 +46,46 @@ router.post('/news', async (req, res) => {
         [article.link, "news", sourceId, content, contentHash, tenantId]
       );
 
-      if (insert.rows.length === 0) {
-        continue;
-      }
+      if (insert.rows.length === 0) continue;
 
       const post = insert.rows[0];
 
       await findOrCreateClusterForPost(post.id, content, tenantId);
 
       let sentiment = analyzeSentiment(content);
-      sentiment = sentiment * sourceWeight; // ⭐ apply weighting
+      sentiment = sentiment * sourceWeight;
       await db.insertSentimentResult(post.id, sentiment, tenantId);
 
       const topics = extractTopics(content);
       await db.insertPostTopics(post.id, topics, tenantId);
+
+      // ⭐ STEP 1 — Detect entities
+      const entityResponse = await fetch(
+        `${process.env.API_BASE_URL}/api/entities`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: req.headers.authorization
+          },
+          body: JSON.stringify({ text: content })
+        }
+      );
+
+      const { entities } = await entityResponse.json();
+
+      // ⭐ STEP 2 — Link post to FIRST entity
+      if (entities && entities.length > 0) {
+        await db.pool.query(
+          `UPDATE posts SET entity_id = $1 WHERE id = $2`,
+          [entities[0].id, post.id]
+        );
+
+        // ⭐ STEP 3 — Trigger enrichment
+        if (db.updateEntityScorecard) {
+          await db.updateEntityScorecard(entities[0].id);
+        }
+      }
 
       results.push({
         id: post.id,
