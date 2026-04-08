@@ -11,6 +11,8 @@ const { getSourceId, getSourceWeight } = require('../utils/sourceRegistry');
 const analyze = require("../services/analyzeService");
 const { findOrCreateEntityFromAnalysis } = require("../services/entityService");
 
+const { processPostPipeline } = require("../pipeline/processPostPipeline");
+
 const parser = new RSSParser({
   requestOptions: {
     headers: {
@@ -57,7 +59,7 @@ router.post('/aljazeera', async (req, res) => {
       const analysis = await analyze(content);
 
       // -------------------------------
-      // ENTITY LINKING (NEW + CRITICAL)
+      // ENTITY LINKING (AUTO‑CREATE)
       // -------------------------------
       let entityId = null;
 
@@ -79,15 +81,21 @@ router.post('/aljazeera', async (req, res) => {
         );
       }
 
-      // Sentiment scoring (weighted)
+      // -------------------------------
+      // SENTIMENT (weighted)
+      // -------------------------------
       let sentiment = analyzeSentiment(content) * sourceWeight;
       await db.insertSentimentResult(post.id, sentiment, tenantId);
 
-      // Topic extraction
+      // -------------------------------
+      // TOPICS
+      // -------------------------------
       const topics = extractTopics(content);
       await db.insertPostTopics(post.id, topics, tenantId);
 
-      // Tag extraction
+      // -------------------------------
+      // TAGS
+      // -------------------------------
       if (Array.isArray(analysis.tags) && analysis.tags.length > 0) {
         for (const tag of analysis.tags) {
           await db.pool.query(
@@ -97,6 +105,11 @@ router.post('/aljazeera', async (req, res) => {
           );
         }
       }
+
+      // -------------------------------
+      // FULL PIPELINE (NER + sentiment + topics + tags + auto‑create)
+      // -------------------------------
+      await processPostPipeline(post.id, content);
 
       results.push({
         id: post.id,

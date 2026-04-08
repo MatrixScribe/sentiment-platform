@@ -6,6 +6,9 @@ const cors = require("cors");
 const app = express();
 const authMiddleware = require("./middleware/authMiddleware");
 
+// ⭐ NEW: Auto‑migration system
+const { runMigrations } = require("./db/migrations");
+
 // -------------------- ENV VALIDATION --------------------
 if (!process.env.API_BASE_URL) {
   console.warn("⚠️  WARNING: API_BASE_URL is missing. Using fallback: http://localhost:4000");
@@ -44,10 +47,10 @@ app.use("/api/paypal/webhook", require("./routes/paypalWebhook"));
 
 // -------------------- PROTECTED ROUTES --------------------
 
-// Entity detection (NLP extraction)
+// Entity detection (NLP extraction + auto‑create)
 app.use("/api/entities", authMiddleware, require("./routes/entityDetectRoute"));
 
-// ⭐ FIXED: Use the REAL SQL entity route
+// ⭐ REAL SQL entity route (correct)
 app.use("/api/entity", authMiddleware, require("./routes/entityRoute"));
 
 // Insights
@@ -78,6 +81,16 @@ app.use("/api/ingest", authMiddleware, require("./routes/iolIngestRoute"));
 // -------------------- CRON --------------------
 require("./cron/scheduler");
 
-// -------------------- SERVER --------------------
-const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+// -------------------- SERVER (with migrations) --------------------
+(async () => {
+  try {
+    await runMigrations();   // ⭐ Auto‑create tables before server starts
+    console.log("🛠️ Migrations complete. Starting server...");
+
+    const PORT = process.env.PORT || 4000;
+    app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+  } catch (err) {
+    console.error("❌ Migration or startup error:", err);
+    process.exit(1);
+  }
+})();
