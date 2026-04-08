@@ -9,6 +9,7 @@ const hashContent = require('../utils/hash');
 const { findOrCreateClusterForPost } = require('../utils/storyClustering');
 const { getSourceId, getSourceWeight } = require('../utils/sourceRegistry');
 const analyze = require("../services/analyzeService");
+const { findOrCreateEntityFromAnalysis } = require("../services/entityService");
 
 const parser = new RSSParser({
   requestOptions: {
@@ -37,6 +38,7 @@ router.post('/aljazeera', async (req, res) => {
       const content = `${item.title}\n\n${item.contentSnippet || ""}`;
       const contentHash = hashContent(content);
 
+      // Insert post (deduped)
       const insert = await db.pool.query(
         `INSERT INTO posts (external_id, source, source_id, content, content_hash, tenant_id)
          VALUES ($1, $2, $3, $4, $5, $6)
@@ -46,15 +48,22 @@ router.post('/aljazeera', async (req, res) => {
       );
 
       if (insert.rows.length === 0) continue;
-
       const post = insert.rows[0];
 
+      // Story clustering
       await findOrCreateClusterForPost(post.id, content, tenantId);
 
-      // unified analysis
+      // Unified analysis (NER, tags, entity detection)
       const analysis = await analyze(content);
 
-      if (analysis.entity) {
+      // -------------------------------
+      // ENTITY LINKING (NEW + CRITICAL)
+      // -------------------------------
+      let entityId = null;
+
+      if (analysis.entity && analysis.entity.name) {
+        entityId = await findOrCreateEntityFromAnalysis(analysis, tenantId);
+
         await db.pool.query(
           `UPDATE posts
            SET entity_id = $1,
@@ -62,7 +71,7 @@ router.post('/aljazeera', async (req, res) => {
                entity_confidence = $3
            WHERE id = $4`,
           [
-            analysis.entity.id || null,
+            entityId,
             analysis.entityType || null,
             analysis.confidence || null,
             post.id
@@ -70,15 +79,15 @@ router.post('/aljazeera', async (req, res) => {
         );
       }
 
-      // existing sentiment logic (weighted)
+      // Sentiment scoring (weighted)
       let sentiment = analyzeSentiment(content) * sourceWeight;
       await db.insertSentimentResult(post.id, sentiment, tenantId);
 
-      // existing topics logic
+      // Topic extraction
       const topics = extractTopics(content);
       await db.insertPostTopics(post.id, topics, tenantId);
 
-      // tags
+      // Tag extraction
       if (Array.isArray(analysis.tags) && analysis.tags.length > 0) {
         for (const tag of analysis.tags) {
           await db.pool.query(
@@ -89,7 +98,13 @@ router.post('/aljazeera', async (req, res) => {
         }
       }
 
-      results.push({ id: post.id, external_id: item.link, sentiment, topics });
+      results.push({
+        id: post.id,
+        external_id: item.link,
+        sentiment,
+        topics,
+        entity_id: entityId
+      });
     }
 
     res.json({ ok: true, ingested: results.length, posts: results });
