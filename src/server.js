@@ -6,6 +6,15 @@ const cors = require("cors");
 const app = express();
 const authMiddleware = require("./middleware/authMiddleware");
 
+// -------------------- ENV VALIDATION (ADDED) --------------------
+if (!process.env.API_BASE_URL) {
+  console.warn("⚠️  WARNING: API_BASE_URL is missing. Using fallback: http://localhost:4000");
+  process.env.API_BASE_URL = "http://localhost:4000";
+}
+
+// Log env on startup (safe)
+console.log("🌍 API_BASE_URL:", process.env.API_BASE_URL);
+
 // -------------------- GLOBAL MIDDLEWARE --------------------
 app.use(express.json());
 
