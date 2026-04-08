@@ -47,9 +47,8 @@ app.use("/api/paypal/webhook", require("./routes/paypalWebhook"));
 // Entity detection (NLP extraction)
 app.use("/api/entities", authMiddleware, require("./routes/entityDetectRoute"));
 
-// ⭐ NEW: Your live entity details route (the one you created)
-app.use("/api/entity", authMiddleware, require("./routes/entity"));  
-// If your file is named entityRoute.js, change to require("./routes/entityRoute")
+// ⭐ FIXED: Use the REAL SQL entity route
+app.use("/api/entity", authMiddleware, require("./routes/entityRoute"));
 
 // Insights
 app.use("/api/insights/news", authMiddleware, require("./routes/newsInsightsUnified"));
