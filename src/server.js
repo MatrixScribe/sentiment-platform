@@ -6,13 +6,12 @@ const cors = require("cors");
 const app = express();
 const authMiddleware = require("./middleware/authMiddleware");
 
-// -------------------- ENV VALIDATION (ADDED) --------------------
+// -------------------- ENV VALIDATION --------------------
 if (!process.env.API_BASE_URL) {
   console.warn("⚠️  WARNING: API_BASE_URL is missing. Using fallback: http://localhost:4000");
   process.env.API_BASE_URL = "http://localhost:4000";
 }
 
-// Log env on startup (safe)
 console.log("🌍 API_BASE_URL:", process.env.API_BASE_URL);
 
 // -------------------- GLOBAL MIDDLEWARE --------------------
@@ -44,19 +43,25 @@ app.use("/api/paypal/invoices", require("./routes/paypalInvoices"));
 app.use("/api/paypal/webhook", require("./routes/paypalWebhook"));
 
 // -------------------- PROTECTED ROUTES --------------------
-app.use("/api/entities", authMiddleware, require("./routes/entityDetectRoute"));
-app.use("/api/entity", authMiddleware, require("./routes/entityRoute"));
 
+// Entity detection (NLP extraction)
+app.use("/api/entities", authMiddleware, require("./routes/entityDetectRoute"));
+
+// ⭐ NEW: Your live entity details route (the one you created)
+app.use("/api/entity", authMiddleware, require("./routes/entity"));  
+// If your file is named entityRoute.js, change to require("./routes/entityRoute")
+
+// Insights
 app.use("/api/insights/news", authMiddleware, require("./routes/newsInsightsUnified"));
 app.use("/api/insights/reddit", authMiddleware, require("./routes/redditInsights"));
 app.use("/api/insights/cross-source", authMiddleware, require("./routes/crossSourceInsights"));
 app.use("/api/insights/narrative", authMiddleware, require("./routes/narrativeShiftInsights"));
 app.use("/api/insights/narrative/alerts-store", authMiddleware, require("./routes/narrativeAlerts"));
 
-app.use("/api/process", authMiddleware, require("./routes/processRoute"));
+// Analytics
 app.use("/api/analytics", authMiddleware, require("./routes/analyticsRoute"));
 
-// -------------------- INGESTION --------------------
+// Ingestion
 app.use("/api/ingest", authMiddleware, require("./routes/manualIngestRoute"));
 app.use("/api/ingest", authMiddleware, require("./routes/redditIngestRoute"));
 app.use("/api/ingest", authMiddleware, require("./routes/newsIngestRoute"));
