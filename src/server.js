@@ -6,7 +6,7 @@ const cors = require("cors");
 const app = express();
 const authMiddleware = require("./middleware/authMiddleware");
 
-// ⭐ NEW: Auto‑migration system
+// ⭐ Auto‑migration system
 const { runMigrations } = require("./db/migrations");
 
 // -------------------- ENV VALIDATION --------------------
