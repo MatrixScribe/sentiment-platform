@@ -109,7 +109,7 @@ router.post('/aljazeera', async (req, res) => {
       // -------------------------------
       // FULL PIPELINE (NER + sentiment + topics + tags + auto‑create)
       // -------------------------------
-      await processPostPipeline(post.id, content);
+      await processPostPipeline(post.id, content, tenantId);
 
       results.push({
         id: post.id,

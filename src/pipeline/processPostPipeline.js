@@ -11,7 +11,12 @@ function makeSlug(name) {
   return slugify(name, { lower: true, strict: true, trim: true });
 }
 
-async function processPostPipeline(postId, text) {
+async function processPostPipeline(postId, text, tenantId) {
+  if (!tenantId) {
+    console.error("❌ Missing tenantId in processPostPipeline");
+    return;
+  }
+
   // 1) Detect entity name
   const entityName = await detectEntityAI(text);
 
@@ -27,7 +32,7 @@ async function processPostPipeline(postId, text) {
   const existing = await db.pool.query(
     `
     SELECT id FROM entities
-    WHERE slug = $1 OR LOWER(name) = $2
+    WHERE slug = $1 OR normalized_name = $2
     LIMIT 1
     `,
     [slug, normalized]
@@ -59,10 +64,10 @@ async function processPostPipeline(postId, text) {
   const sentiment = await analyzeSentiment(text);
   await db.pool.query(
     `
-    INSERT INTO sentiment_scores (post_id, sentiment, score)
-    VALUES ($1, $2, $3)
+    INSERT INTO sentiment_scores (post_id, sentiment, score, tenant_id)
+    VALUES ($1, $2, $3, $4)
     `,
-    [postId, sentiment.label, sentiment.score]
+    [postId, sentiment.label, sentiment.score, tenantId]
   );
 
   // 6) Topic extraction
@@ -70,11 +75,15 @@ async function processPostPipeline(postId, text) {
   for (const topic of topics) {
     await db.pool.query(
       `
-      INSERT INTO post_topics (post_id, topic_id)
-      VALUES ($1, (SELECT id FROM topics WHERE name = $2 LIMIT 1))
+      INSERT INTO post_topics (post_id, topic_id, tenant_id)
+      VALUES (
+        $1,
+        (SELECT id FROM topics WHERE name = $2 LIMIT 1),
+        $3
+      )
       ON CONFLICT DO NOTHING
       `,
-      [postId, topic]
+      [postId, topic, tenantId]
     );
   }
 
@@ -83,10 +92,10 @@ async function processPostPipeline(postId, text) {
   for (const tag of tags) {
     await db.pool.query(
       `
-      INSERT INTO post_tags (post_id, tag)
-      VALUES ($1, $2)
+      INSERT INTO post_tags (post_id, tag, tenant_id)
+      VALUES ($1, $2, $3)
       `,
-      [postId, tag]
+      [postId, tag, tenantId]
     );
   }
 
