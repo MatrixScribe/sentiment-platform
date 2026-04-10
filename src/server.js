@@ -45,12 +45,15 @@ app.use("/api/paypal/orders", require("./routes/paypalOrders"));
 app.use("/api/paypal/invoices", require("./routes/paypalInvoices"));
 app.use("/api/paypal/webhook", require("./routes/paypalWebhook"));
 
+// ⭐ PUBLIC mirror route for frontend (no auth)
+app.use("/entity", require("./routes/entityRoute"));
+
 // -------------------- PROTECTED ROUTES --------------------
 
 // Entity detection (NLP extraction + auto‑create)
 app.use("/api/entities", authMiddleware, require("./routes/entityDetectRoute"));
 
-// ⭐ REAL SQL entity route (correct)
+// ⭐ REAL SQL entity route (protected)
 app.use("/api/entity", authMiddleware, require("./routes/entityRoute"));
 
 // Insights
