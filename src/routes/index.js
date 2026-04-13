@@ -1,12 +1,30 @@
-const express = require('express');
+// src/routes/index.js
+const express = require("express");
 const router = express.Router();
 
-const healthRoutes = require('./health');
-const ingestRoutes = require('./ingest');
-const adminRoutes = require('./admin');
+// ------------------------------
+// INSIGHTS (MATCH FRONTEND)
+// ------------------------------
+router.use("/insights/news", require("./newsInsightsUnified"));
+router.use("/insights/cross-source", require("./crossSourceInsights"));
+router.use("/insights/narrative", require("./narrativeShiftInsights"));
+router.use("/insights/narrative/alerts-store", require("./narrativeAlerts"));
 
-router.use('/health', healthRoutes);
-router.use('/ingest', ingestRoutes);
-router.use('/admin', adminRoutes);
+// ------------------------------
+// ANALYTICS
+// ------------------------------
+router.use("/analytics", require("./analyticsRoute"));
+
+// ------------------------------
+// ENTITIES
+// ------------------------------
+router.use("/entities/top", require("./entitiesTopRoute"));
+router.use("/entities/search", require("./entitiesSearchRoute"));
+router.use("/entities/list", require("./entitiesListRoute"));
+
+// ------------------------------
+// ENTITY DETAILS
+// ------------------------------
+router.use("/entity", require("./entityRoute"));
 
 module.exports = router;
