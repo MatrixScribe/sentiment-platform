@@ -2,6 +2,7 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
+const cookieParser = require("cookie-parser");
 
 const app = express();
 const authMiddleware = require("./middleware/authMiddleware");
@@ -19,16 +20,20 @@ console.log("🌍 API_BASE_URL:", process.env.API_BASE_URL);
 
 // -------------------- GLOBAL MIDDLEWARE --------------------
 app.use(express.json());
+app.use(cookieParser());
 
+// ⭐ FIXED CORS — allow frontend + cookies
 app.use(
   cors({
-    origin: "*",
+    origin: "https://matrixscribe-ui.onrender.com",
+    credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 
-app.options(/.*/, cors());
+// Preflight
+app.options("*", cors());
 
 // -------------------- HEALTH ENDPOINTS --------------------
 app.get("/status", (req, res) => {
