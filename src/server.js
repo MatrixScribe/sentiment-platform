@@ -20,11 +20,13 @@ console.log("🌍 API_BASE_URL:", process.env.API_BASE_URL);
 // -------------------- GLOBAL MIDDLEWARE --------------------
 app.use(express.json());
 
-app.use(cors({
-  origin: "*",
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"]
-}));
+app.use(
+  cors({
+    origin: "*",
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
 
 app.options(/.*/, cors());
 
@@ -55,6 +57,15 @@ app.use("/api/entities", authMiddleware, require("./routes/entityDetectRoute"));
 
 // ⭐ REAL SQL entity route (protected)
 app.use("/api/entity", authMiddleware, require("./routes/entityRoute"));
+
+// ⭐ NEW: Full intelligence bundle for ALL entities
+app.use("/api/entities", authMiddleware, require("./routes/entitiesListRoute"));
+
+// ⭐ NEW: Ranked entities (volume, sentiment, velocity, volatility)
+app.use("/api/entities/top", authMiddleware, require("./routes/entitiesTopRoute"));
+
+// ⭐ NEW: Entity search (autocomplete)
+app.use("/api/entities", authMiddleware, require("./routes/entitiesSearchRoute"));
 
 // Insights
 app.use("/api/insights/news", authMiddleware, require("./routes/newsInsightsUnified"));
@@ -87,7 +98,7 @@ require("./cron/scheduler");
 // -------------------- SERVER (with migrations) --------------------
 (async () => {
   try {
-    await runMigrations();   // ⭐ Auto‑create tables before server starts
+    await runMigrations(); // ⭐ Auto‑create tables before server starts
     console.log("🛠️ Migrations complete. Starting server...");
 
     const PORT = process.env.PORT || 4000;
