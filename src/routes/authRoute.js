@@ -62,7 +62,6 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    // Include tenant_id in the token
     const token = jwt.sign(
       { 
         user_id: user.id, 
@@ -73,9 +72,16 @@ router.post('/login', async (req, res) => {
       { expiresIn: '7d' }
     );
 
+    // 🔥 Set JWT as HttpOnly cookie
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "none",
+      maxAge: 7 * 24 * 60 * 60 * 1000
+    });
+
     res.json({
       ok: true,
-      token,
       user: {
         id: user.id,
         email: user.email,
