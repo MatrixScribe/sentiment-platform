@@ -32,8 +32,9 @@ app.use(
   })
 );
 
-// Preflight
-app.options("*", cors());
+// ⭐ FIXED — Express 5 cannot use "*" here
+// app.options("*", cors()); ❌ CRASHES
+app.options(/.*/, cors()); // ✔ SAFE
 
 // -------------------- HEALTH ENDPOINTS --------------------
 app.get("/status", (req, res) => {
