@@ -72,7 +72,7 @@ router.post('/login', async (req, res) => {
       { expiresIn: '7d' }
     );
 
-    // 🔥 Set JWT as HttpOnly cookie
+    // Set JWT as HttpOnly cookie
     res.cookie("token", token, {
       httpOnly: true,
       secure: true,
@@ -80,14 +80,17 @@ router.post('/login', async (req, res) => {
       maxAge: 7 * 24 * 60 * 60 * 1000
     });
 
+    // ⭐ FIX: RETURN TOKEN IN JSON
     res.json({
       ok: true,
+      token: token,
       user: {
         id: user.id,
         email: user.email,
         tenant_id: user.tenant_id
       }
     });
+
   } catch (err) {
     console.error("Login error:", err);
     res.status(500).json({ error: "Login failed" });
