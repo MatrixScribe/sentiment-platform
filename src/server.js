@@ -29,12 +29,12 @@ app.use(
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
+    exposedHeaders: ["set-cookie"],   // ⭐ REQUIRED FOR COOKIES TO BE READ BY FRONTEND
   })
 );
 
 // ⭐ FIXED — Express 5 cannot use "*" here
-// app.options("*", cors()); ❌ CRASHES
-app.options(/.*/, cors()); // ✔ SAFE
+app.options(/.*/, cors());
 
 // -------------------- HEALTH ENDPOINTS --------------------
 app.get("/status", (req, res) => {
@@ -57,33 +57,20 @@ app.use("/api/paypal/webhook", require("./routes/paypalWebhook"));
 app.use("/entity", require("./routes/entityRoute"));
 
 // -------------------- PROTECTED ROUTES --------------------
-
-// Entity detection (NLP extraction + auto‑create)
 app.use("/api/entities", authMiddleware, require("./routes/entityDetectRoute"));
-
-// ⭐ REAL SQL entity route (protected)
 app.use("/api/entity", authMiddleware, require("./routes/entityRoute"));
-
-// ⭐ NEW: Full intelligence bundle for ALL entities
 app.use("/api/entities", authMiddleware, require("./routes/entitiesListRoute"));
-
-// ⭐ NEW: Ranked entities (volume, sentiment, velocity, volatility)
 app.use("/api/entities/top", authMiddleware, require("./routes/entitiesTopRoute"));
-
-// ⭐ NEW: Entity search (autocomplete)
 app.use("/api/entities", authMiddleware, require("./routes/entitiesSearchRoute"));
 
-// Insights
 app.use("/api/insights/news", authMiddleware, require("./routes/newsInsightsUnified"));
 app.use("/api/insights/reddit", authMiddleware, require("./routes/redditInsights"));
 app.use("/api/insights/cross-source", authMiddleware, require("./routes/crossSourceInsights"));
 app.use("/api/insights/narrative", authMiddleware, require("./routes/narrativeShiftInsights"));
 app.use("/api/insights/narrative/alerts-store", authMiddleware, require("./routes/narrativeAlerts"));
 
-// Analytics
 app.use("/api/analytics", authMiddleware, require("./routes/analyticsRoute"));
 
-// Ingestion
 app.use("/api/ingest", authMiddleware, require("./routes/manualIngestRoute"));
 app.use("/api/ingest", authMiddleware, require("./routes/redditIngestRoute"));
 app.use("/api/ingest", authMiddleware, require("./routes/newsIngestRoute"));
@@ -104,7 +91,7 @@ require("./cron/scheduler");
 // -------------------- SERVER (with migrations) --------------------
 (async () => {
   try {
-    await runMigrations(); // ⭐ Auto‑create tables before server starts
+    await runMigrations();
     console.log("🛠️ Migrations complete. Starting server...");
 
     const PORT = process.env.PORT || 4000;
