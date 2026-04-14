@@ -56,3 +56,21 @@ cron.schedule("0 */4 * * *", async () => {
     console.error("❌ CRON News error:", err.message);
   }
 });
+// ---------------- REUTERS INGESTION (every 4 hours) ----------------
+cron.schedule("0 */4 * * *", async () => {
+  try {
+    console.log("⏰ CRON: Running Reuters ingestion...");
+
+    await fetch(`${BASE_URL}/api/ingest/reuters`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${CRON_TOKEN}`
+      }
+    });
+
+    console.log("✅ CRON: Reuters ingestion complete.");
+  } catch (err) {
+    console.error("❌ CRON Reuters error:", err.message);
+  }
+});

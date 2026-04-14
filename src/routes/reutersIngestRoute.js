@@ -3,48 +3,57 @@ const express = require("express");
 const router = express.Router();
 const Parser = require("rss-parser");
 const parser = new Parser();
+
 const db = require("../db");
 const analyzeSentiment = require("../utils/sentiment");
-const { getSourceId } = require("../utils/sourceRegistry");
-const extractTopics = require("../utils/topicExtractor");
+const extractTopics = require("../utils/topics");
+const hashContent = require("../utils/hash");
+
+const { findOrCreateClusterForPost } = require("../utils/storyClustering");
+const { getSourceId, getSourceWeight } = require("../utils/sourceRegistry");
+
 const analyze = require("../services/analyzeService");
+const { findOrCreateEntityFromAnalysis } = require("../services/entityService");
+
+const { processPostPipeline } = require("../pipeline/processPostPipeline");
 
 router.post("/reuters", async (req, res) => {
   try {
+    const tenantId = req.user.tenant_id;
+
     const FEED_URL =
       "https://news.google.com/rss/search?q=site:reuters.com&hl=en-US&gl=US&ceid=US:en";
 
     const feed = await parser.parseURL(FEED_URL);
-    const sourceId = await getSourceId("Reuters");
 
-    let ingested = 0;
-    let posts = [];
+    const sourceId = await getSourceId("Reuters");
+    const sourceWeight = await getSourceWeight(sourceId);
+
+    const results = [];
 
     for (const item of feed.items) {
-      const externalId = item.link;
-      const content = item.title || "";
+      const content = `${item.title}\n\n${item.contentSnippet || ""}`;
+      const contentHash = hashContent(content);
 
-      const exists = await db.pool.query(
-        `SELECT id FROM posts WHERE external_id = $1`,
-        [externalId]
-      );
-      if (exists.rows.length > 0) continue;
-
-      const sentimentResult = analyzeSentiment(content);
-
-      const inserted = await db.pool.query(
-        `INSERT INTO posts (external_id, source, content, tenant_id, source_id)
-         VALUES ($1, $2, $3, 'global', $4)
-         RETURNING id`,
-        [externalId, "Reuters", content, sourceId]
+      const insert = await db.pool.query(
+        `INSERT INTO posts (external_id, source, source_id, content, content_hash, tenant_id)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT ON CONSTRAINT unique_post_source DO NOTHING
+         RETURNING id, content`,
+        [item.link, "reuters", sourceId, content, contentHash, tenantId]
       );
 
-      const postId = inserted.rows[0].id;
+      if (insert.rows.length === 0) continue;
+      const post = insert.rows[0];
 
-      // unified analysis
+      await findOrCreateClusterForPost(post.id, content, tenantId);
+
       const analysis = await analyze(content);
 
-      if (analysis.entity) {
+      let entityId = null;
+      if (analysis.entity && analysis.entity.name) {
+        entityId = await findOrCreateEntityFromAnalysis(analysis, tenantId);
+
         await db.pool.query(
           `UPDATE posts
            SET entity_id = $1,
@@ -52,70 +61,48 @@ router.post("/reuters", async (req, res) => {
                entity_confidence = $3
            WHERE id = $4`,
           [
-            analysis.entity.id || null,
+            entityId,
             analysis.entityType || null,
             analysis.confidence || null,
-            postId
+            post.id
           ]
         );
       }
 
-      await db.pool.query(
-        `INSERT INTO sentiment_scores (post_id, sentiment, score, tenant_id)
-         VALUES ($1, $2, $3, 'global')`,
-        [postId, sentimentResult.sentiment, sentimentResult.score]
-      );
+      let sentiment = analyzeSentiment(content) * sourceWeight;
+      await db.insertSentimentResult(post.id, sentiment, tenantId);
 
       const topics = extractTopics(content);
-      for (const topic of topics) {
-        let topicRow = await db.pool.query(
-          `SELECT id FROM topics WHERE name = $1`,
-          [topic]
-        );
+      await db.insertPostTopics(post.id, topics, tenantId);
 
-        let topicId;
-        if (topicRow.rows.length === 0) {
-          const newTopic = await db.pool.query(
-            `INSERT INTO topics (name) VALUES ($1) RETURNING id`,
-            [topic]
-          );
-          topicId = newTopic.rows[0].id;
-        } else {
-          topicId = topicRow.rows[0].id;
-        }
-
-        await db.pool.query(
-          `INSERT INTO post_topics (post_id, topic_id, tenant_id)
-           VALUES ($1, $2, 'global')`,
-          [postId, topicId]
-        );
-      }
-
-      if (Array.isArray(analysis.tags) && analysis.tags.length > 0) {
+      if (Array.isArray(analysis.tags)) {
         for (const tag of analysis.tags) {
           await db.pool.query(
             `INSERT INTO post_tags (post_id, tag, tenant_id)
-             VALUES ($1, $2, 'global')`,
-            [postId, tag]
+             VALUES ($1, $2, $3)`,
+            [post.id, tag, tenantId]
           );
         }
       }
 
-      ingested++;
-      posts.push({
-        id: postId,
-        external_id: externalId,
-        sentiment: sentimentResult.score,
-        topics
+      await processPostPipeline(post.id, content, tenantId);
+
+      results.push({
+        id: post.id,
+        external_id: item.link,
+        sentiment,
+        topics,
+        entity_id: entityId
       });
     }
 
     res.json({
       ok: true,
       feed: FEED_URL,
-      ingested,
-      posts
+      ingested: results.length,
+      posts: results
     });
+
   } catch (err) {
     console.error("Reuters ingest error:", err);
     res.status(500).json({ ok: false, error: err.message });
