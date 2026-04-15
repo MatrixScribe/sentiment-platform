@@ -3,7 +3,9 @@ const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const router = express.Router();
-const db = require('../../db');
+
+// ⭐ FIXED: Correct db import
+const db = require('../db');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
 
@@ -72,7 +74,6 @@ router.post('/login', async (req, res) => {
       { expiresIn: '7d' }
     );
 
-    // Set JWT as HttpOnly cookie
     res.cookie("token", token, {
       httpOnly: true,
       secure: true,
@@ -80,7 +81,6 @@ router.post('/login', async (req, res) => {
       maxAge: 7 * 24 * 60 * 60 * 1000
     });
 
-    // ⭐ FIX: RETURN TOKEN IN JSON
     res.json({
       ok: true,
       token: token,
