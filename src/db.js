@@ -25,6 +25,36 @@ if (isProduction && process.env.DATABASE_URL) {
 module.exports = {
   pool,
 
+  // ---------------- USERS ----------------
+
+  async getUserByEmail(email) {
+    const res = await pool.query(
+      `SELECT * FROM users WHERE email = $1 LIMIT 1`,
+      [email]
+    );
+    return res.rows[0];
+  },
+
+  async createUser(email, passwordHash, tenantId) {
+    const res = await pool.query(
+      `
+      INSERT INTO users (email, password_hash, tenant_id)
+      VALUES ($1, $2, $3)
+      RETURNING id, email, tenant_id, created_at
+      `,
+      [email, passwordHash, tenantId]
+    );
+    return res.rows[0];
+  },
+
+  async getUserById(id) {
+    const res = await pool.query(
+      `SELECT * FROM users WHERE id = $1 LIMIT 1`,
+      [id]
+    );
+    return res.rows[0];
+  },
+
   // ---------------- POSTS ----------------
 
   async getPostById(id, tenantId) {
