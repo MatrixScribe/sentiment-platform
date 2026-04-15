@@ -8,10 +8,25 @@ router.get("/:slug", async (req, res) => {
   const { slug } = req.params;
 
   try {
-    // 1) Core entity
     const entityResult = await pool.query(
       `
-      SELECT id, name, slug, type, region, description, normalized_name, created_at, updated_at
+      SELECT
+        id,
+        name,
+        slug,
+        type,
+        region,
+        description,
+        normalized_name,
+        canonical_name,
+        aliases,
+        metadata,
+        geo_metadata,
+        org_metadata,
+        person_metadata,
+        classification_confidence,
+        created_at,
+        updated_at
       FROM entities
       WHERE slug = $1
       `,
@@ -25,7 +40,6 @@ router.get("/:slug", async (req, res) => {
     const entity = entityResult.rows[0];
     const entityId = entity.id;
 
-    // 2) Recent posts for this entity
     const postsResult = await pool.query(
       `
       SELECT p.id, p.content, p.source, p.created_at
@@ -37,7 +51,6 @@ router.get("/:slug", async (req, res) => {
       [entityId]
     );
 
-    // 3) Sentiment breakdown
     const sentimentResult = await pool.query(
       `
       SELECT s.sentiment, COUNT(*) AS count, AVG(s.score) AS avg_score
@@ -49,7 +62,6 @@ router.get("/:slug", async (req, res) => {
       [entityId]
     );
 
-    // 4) Sentiment timeline (daily)
     const sentimentTimelineResult = await pool.query(
       `
       SELECT
@@ -64,7 +76,6 @@ router.get("/:slug", async (req, res) => {
       [entityId]
     );
 
-    // 5) Top topics for this entity
     const topicsResult = await pool.query(
       `
       SELECT t.name, COUNT(*) AS count
@@ -79,7 +90,6 @@ router.get("/:slug", async (req, res) => {
       [entityId]
     );
 
-    // 6) Top tags for this entity
     const tagsResult = await pool.query(
       `
       SELECT pt.tag, COUNT(*) AS count
@@ -93,7 +103,6 @@ router.get("/:slug", async (req, res) => {
       [entityId]
     );
 
-    // 7) Related entities (co‑mentioned in same posts)
     const relatedResult = await pool.query(
       `
       SELECT e2.id, e2.name, e2.slug, COUNT(*) AS count
@@ -109,7 +118,6 @@ router.get("/:slug", async (req, res) => {
       [entityId]
     );
 
-    // 8) Narrative / insight summary (if any)
     const insightResult = await pool.query(
       `
       SELECT date, topics, sentiment_trend, summary
@@ -124,22 +132,22 @@ router.get("/:slug", async (req, res) => {
       entity,
       timeline: sentimentTimelineResult.rows,
       articles: postsResult.rows,
-      publishers: [], // can be derived later from posts.source
+      publishers: [],
       topics: topicsResult.rows,
       tags: tagsResult.rows,
       related: relatedResult.rows,
-      forecast: [],   // placeholder for future model
-      alerts: [],     // can be wired to narrative_alerts later
-      events: [],     // placeholder
+      forecast: [],
+      alerts: [],
+      events: [],
       risk: {
         sentiment: sentimentResult.rows,
       },
       comparison: [],
-      insights: insightResult.rows
+      insights: insightResult.rows,
     });
   } catch (err) {
     console.error("Entity route error:", err);
-    res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: err.message });
   }
 });
 

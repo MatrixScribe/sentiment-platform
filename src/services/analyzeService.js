@@ -1,62 +1,33 @@
-// src/services/analyzeService.js
-const sentiment = require("../utils/sentiment");
-const extractTopics = require("../utils/topics");
-const extractTags = require("../utils/tags");
+// services/analyzeService.js
+
 const { detectEntityAI } = require("../ai/entityClassifier");
-const db = require("../db");
 
-async function analyze(text) {
-  if (!text || text.trim().length === 0) {
-    return {
-      sentiment: null,
-      topics: [],
-      tags: [],
-      entity: null,
-      entityType: null,
-      confidence: 0
-    };
-  }
-
-  // ---------------- SENTIMENT ----------------
-  const sentimentResult = sentiment(text); 
-  // sentimentResult = { sentiment: "positive|negative|neutral", score: number }
-
-  // ---------------- TOPICS ----------------
-  const topics = extractTopics(text); // array of strings
-
-  // ---------------- TAGS ----------------
-  const tags = extractTags(text); // array of strings
-
-  // ---------------- ENTITY DETECTION (AI) ----------------
-  let entity = null;
-  let entityType = null;
-  let confidence = 0;
-
-  try {
-    const detectedName = await detectEntityAI(text);
-
-    if (detectedName) {
-      const allEntities = await db.getAllEntities();
-      const match = allEntities.find(e => e.name.toLowerCase() === detectedName.toLowerCase());
-
-      if (match) {
-        entity = match;
-        entityType = "organization"; // placeholder
-        confidence = 0.9;
-      }
-    }
-  } catch (err) {
-    console.error("Entity detection failed:", err.message);
-  }
-
+// TEMP placeholder models.
+// Replace these with your real sentiment + topic models.
+async function someSentimentModel(content) {
   return {
-    sentiment: sentimentResult,
-    topics,
-    tags,
-    entity,
-    entityType,
-    confidence
+    sentiment: "neutral",
+    score: 0.0,
   };
 }
 
-module.exports = analyze;
+async function someTopicModel(content) {
+  return [];
+}
+
+module.exports = async function analyze(content) {
+  // 1. Sentiment
+  const sentiment = await someSentimentModel(content);
+
+  // 2. Topics
+  const topics = await someTopicModel(content);
+
+  // 3. Entity extraction (REQUIRED for ontology pipeline)
+  const entity = await detectEntityAI(content);
+
+  return {
+    sentiment,
+    topics,
+    entity,
+  };
+};

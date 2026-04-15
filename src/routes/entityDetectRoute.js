@@ -4,13 +4,18 @@ const router = express.Router();
 const db = require("../db");
 const { detectEntityAI } = require("../ai/entityClassifier");
 const slugify = require("slugify");
+const {
+  classifyEntityType,
+  canonicalizeEntityName,
+  extractAliases,
+  enrichMetadata,
+} = require("../ai/entityOntology");
 
-// Utility: normalize entity names → slugs
 function makeSlug(name) {
   return slugify(name, {
     lower: true,
     strict: true,
-    trim: true
+    trim: true,
   });
 }
 
@@ -22,22 +27,25 @@ router.post("/detect", async (req, res) => {
       return res.status(400).json({ error: "Missing text" });
     }
 
-    // 1) Run GPT‑4o classification
     const entityName = await detectEntityAI(text);
 
     if (!entityName) {
       return res.json({
         entity: null,
         entity_id: null,
-        confidence: null
+        confidence: null,
       });
     }
 
-    // 2) Normalize + slugify
-    const slug = makeSlug(entityName);
-    const normalized = entityName.toLowerCase().trim();   // ⭐ FIXED LINE
+    const entityType = classifyEntityType(entityName);
+    const canonicalName = canonicalizeEntityName(entityName);
+    const aliases = extractAliases(entityName);
+    const metadata = enrichMetadata(entityName, entityType);
+    const classificationConfidence = 0.9;
 
-    // 3) Check if entity already exists
+    const slug = makeSlug(entityName);
+    const normalized = entityName.toLowerCase().trim();
+
     const existing = await db.pool.query(
       `
       SELECT id, name, slug
@@ -51,24 +59,56 @@ router.post("/detect", async (req, res) => {
     let entityId;
 
     if (existing.rows.length > 0) {
-      // Entity exists
       entityId = existing.rows[0].id;
     } else {
-      // 4) AUTO‑CREATE ENTITY
       const insert = await db.pool.query(
         `
-        INSERT INTO entities (name, slug, type, region, description, normalized_name, created_at, updated_at)
-        VALUES ($1, $2, 'unknown', 'unknown', 'Auto‑created entity', $3, NOW(), NOW())
+        INSERT INTO entities (
+          name,
+          slug,
+          type,
+          region,
+          description,
+          normalized_name,
+          canonical_name,
+          aliases,
+          metadata,
+          classification_confidence,
+          created_at,
+          updated_at
+        )
+        VALUES (
+          $1,  -- name
+          $2,  -- slug
+          $3,  -- type
+          'unknown',
+          'Auto‑created entity',
+          $4,  -- normalized_name
+          $5,  -- canonical_name
+          $6,  -- aliases
+          $7,  -- metadata
+          $8,  -- classification_confidence
+          NOW(),
+          NOW()
+        )
         RETURNING id, name, slug
         `,
-        [entityName, slug, normalized]
+        [
+          entityName,
+          slug,
+          entityType,
+          normalized,
+          canonicalName,
+          JSON.stringify(aliases),
+          JSON.stringify(metadata),
+          classificationConfidence,
+        ]
       );
 
       entityId = insert.rows[0].id;
-      console.log("🆕 Auto‑created entity:", entityName, "→", slug);
+      console.log("🆕 Auto‑created entity:", entityName, "→", slug, "type:", entityType);
     }
 
-    // 5) If postId provided, update DB
     if (postId) {
       await db.updatePostEntity(postId, entityId);
     }
@@ -76,9 +116,9 @@ router.post("/detect", async (req, res) => {
     return res.json({
       entity: entityName,
       entity_id: entityId,
-      confidence: 0.95
+      type: entityType,
+      confidence: classificationConfidence,
     });
-
   } catch (err) {
     console.error("❌ Entity detection route error:", err);
     return res.status(500).json({ error: "Entity detection failed" });
