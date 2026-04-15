@@ -3,7 +3,7 @@ const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const router = express.Router();
-const db = require('../db');
+const db = require('../../db');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
 
