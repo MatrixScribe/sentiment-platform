@@ -2,7 +2,7 @@ import { Router } from 'express';
 
 import authRoutes from '../modules/auth/auth.routes.js';
 import walletRoutes from '../modules/wallet/wallet.routes.js';
-import topupRoutes from '../modules/topup/topup.routes.js';
+import topupRoutes from '../modules/topups/topup.routes.js';
 import adminRoutes from '../modules/admin/admin.routes.js';
 
 const router = Router();
