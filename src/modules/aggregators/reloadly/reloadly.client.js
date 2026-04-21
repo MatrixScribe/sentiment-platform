@@ -1,9 +1,33 @@
 // src/modules/aggregators/reloadly/reloadly.client.js
 import axios from 'axios';
-import { getReloadlyToken } from './reloadly.auth.js';
+import {
+  getReloadlyOperatorsToken,
+  getReloadlyTopupsToken
+} from './reloadly.auth.js';
 
-export async function reloadlyRequest(method, url, data = null) {
-  const token = await getReloadlyToken();
+export async function reloadlyOperatorsRequest(method, url) {
+  const token = await getReloadlyOperatorsToken();
+
+  try {
+    const response = await axios({
+      method,
+      url: `https://operators.reloadly.com${url}`,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json"
+      }
+    });
+
+    return response.data;
+
+  } catch (err) {
+    console.error("Reloadly Operators API Error:", err.response?.data || err.message);
+    throw new Error("Reloadly Operators API request failed");
+  }
+}
+
+export async function reloadlyTopupsRequest(method, url, data = null) {
+  const token = await getReloadlyTopupsToken();
 
   try {
     const response = await axios({
@@ -20,7 +44,7 @@ export async function reloadlyRequest(method, url, data = null) {
     return response.data;
 
   } catch (err) {
-    console.error("Reloadly API Error:", err.response?.data || err.message);
-    throw new Error("Reloadly API request failed");
+    console.error("Reloadly Topups API Error:", err.response?.data || err.message);
+    throw new Error("Reloadly Topups API request failed");
   }
 }
