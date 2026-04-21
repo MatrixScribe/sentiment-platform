@@ -12,6 +12,9 @@ import adminRoutes from './src/modules/admin/admin.routes.js';
 import paystackRoutes from './src/modules/payments/paystack/paystack.routes.js';
 import { paystackWebhook } from './src/modules/payments/paystack/paystack.controller.js';
 
+// OPTIONAL: Reloadly test
+import { testReloadly } from './src/modules/aggregators/reloadly/reloadly.test.js';
+
 const app = express();
 
 app.use(cors());
@@ -37,4 +40,15 @@ app.use('/', routes);
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
   console.log(`Server running on ${PORT}`);
+
+  // Run Reloadly test AFTER server starts (non-blocking)
+  (async () => {
+    try {
+      console.log("Testing Reloadly connectivity...");
+      await testReloadly();
+      console.log("Reloadly test completed.");
+    } catch (err) {
+      console.error("Reloadly test failed:", err.message);
+    }
+  })();
 });
