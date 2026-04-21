@@ -1,49 +1,68 @@
 // src/modules/aggregators/reloadly/reloadly.auth.js
 import axios from 'axios';
 
-let cachedToken = null;
-let tokenExpiry = null;
+let cachedTokens = {
+  operators: null,
+  topups: null
+};
 
-export async function getReloadlyToken() {
-  const now = Date.now();
+let tokenExpiry = {
+  operators: null,
+  topups: null
+};
 
-  // If token exists and not expired → return cached
-  if (cachedToken && tokenExpiry && now < tokenExpiry) {
-    return cachedToken;
-  }
-
-  // Validate environment variables
+async function requestReloadlyToken(audience) {
   const clientId = process.env.RELOADLY_CLIENT_ID;
   const clientSecret = process.env.RELOADLY_CLIENT_SECRET;
 
   if (!clientId || !clientSecret) {
-    throw new Error("Reloadly credentials missing. Set RELOADLY_CLIENT_ID and RELOADLY_CLIENT_SECRET.");
+    throw new Error("Reloadly credentials missing.");
   }
 
-  try {
-    const response = await axios.post(
-      "https://auth.reloadly.com/oauth/token",
-      {
-        client_id: clientId,
-        client_secret: clientSecret,
-        grant_type: "client_credentials",
-        audience: "https://topups.reloadly.com"
-      },
-      {
-        headers: { "Content-Type": "application/json" }
-      }
-    );
+  const response = await axios.post(
+    "https://auth.reloadly.com/oauth/token",
+    {
+      client_id: clientId,
+      client_secret: clientSecret,
+      grant_type: "client_credentials",
+      audience
+    },
+    { headers: { "Content-Type": "application/json" } }
+  );
 
-    const { access_token, expires_in } = response.data;
+  return response.data;
+}
 
-    // Cache token + expiry
-    cachedToken = access_token;
-    tokenExpiry = now + (expires_in - 60) * 1000; // refresh 1 min early
+export async function getReloadlyOperatorsToken() {
+  const now = Date.now();
 
-    return cachedToken;
-
-  } catch (err) {
-    console.error("Reloadly Auth Error:", err.response?.data || err.message);
-    throw new Error("Failed to authenticate with Reloadly");
+  if (cachedTokens.operators && tokenExpiry.operators > now) {
+    return cachedTokens.operators;
   }
+
+  const { access_token, expires_in } = await requestReloadlyToken(
+    "https://operators.reloadly.com"
+  );
+
+  cachedTokens.operators = access_token;
+  tokenExpiry.operators = now + (expires_in - 60) * 1000;
+
+  return access_token;
+}
+
+export async function getReloadlyTopupsToken() {
+  const now = Date.now();
+
+  if (cachedTokens.topups && tokenExpiry.topups > now) {
+    return cachedTokens.topups;
+  }
+
+  const { access_token, expires_in } = await requestReloadlyToken(
+    "https://topups.reloadly.com"
+  );
+
+  cachedTokens.topups = access_token;
+  tokenExpiry.topups = now + (expires_in - 60) * 1000;
+
+  return access_token;
 }
