@@ -1,0 +1,91 @@
+// ---------------------------------------------------------
+// PRISMA 7+ SCHEMA (NO URL HERE — URL GOES IN prisma.config.ts)
+// ---------------------------------------------------------
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------
+// HYBRID PRICING MODELS
+// ---------------------------------------------------------
+
+model CorridorMarkup {
+  id            String   @id @default(uuid())
+  countryCode   String   @unique
+  markupPercent Decimal  @db.Decimal(10, 5)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model OperatorMarkup {
+  id            String   @id @default(uuid())
+  operatorId    String   @unique
+  markupPercent Decimal  @db.Decimal(10, 5)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model ProductMarkup {
+  id            String   @id @default(uuid())
+  productType   String   @unique
+  markupPercent Decimal  @db.Decimal(10, 5)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model TierMarkup {
+  id            String   @id @default(uuid())
+  minAmount     Decimal  @db.Decimal(10, 2)
+  maxAmount     Decimal  @db.Decimal(10, 2)
+  markupPercent Decimal  @db.Decimal(10, 5)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model PlatformFee {
+  id          String   @id @default(uuid())
+  feeFlat     Decimal  @db.Decimal(10, 2)
+  feePercent  Decimal  @db.Decimal(10, 5)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model FxSpread {
+  id            String   @id @default(uuid())
+  spreadPercent Decimal  @db.Decimal(10, 5)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// ---------------------------------------------------------
+// LEDGER MODEL
+// ---------------------------------------------------------
+
+model LedgerEntry {
+  id               String   @id @default(uuid())
+  type             String
+  amount           Decimal  @db.Decimal(10, 2)
+  currency         String
+  description      String
+  timestamp        DateTime @default(now())
+
+  operatorCost     Decimal? @db.Decimal(10, 2)
+  corridorMarkup   Decimal? @db.Decimal(10, 5)
+  operatorMarkup   Decimal? @db.Decimal(10, 5)
+  productMarkup    Decimal? @db.Decimal(10, 5)
+  tierMarkup       Decimal? @db.Decimal(10, 5)
+  totalMarkupPct   Decimal? @db.Decimal(10, 5)
+  markupAmount     Decimal? @db.Decimal(10, 2)
+  feeAmount        Decimal? @db.Decimal(10, 2)
+  fxRate           Decimal? @db.Decimal(10, 6)
+  fxSpreadAmount   Decimal? @db.Decimal(10, 2)
+  runningBalance   Decimal? @db.Decimal(10, 2)
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
