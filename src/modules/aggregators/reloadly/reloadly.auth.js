@@ -1,14 +1,14 @@
 // src/modules/aggregators/reloadly/reloadly.auth.js
-import axios from 'axios';
+import axios from "axios";
 
 let cachedTokens = {
   operators: null,
-  topups: null
+  topups: null,
 };
 
 let tokenExpiry = {
-  operators: null,
-  topups: null
+  operators: 0,
+  topups: 0,
 };
 
 async function requestReloadlyToken(audience) {
@@ -25,7 +25,7 @@ async function requestReloadlyToken(audience) {
       client_id: clientId,
       client_secret: clientSecret,
       grant_type: "client_credentials",
-      audience
+      audience,
     },
     { headers: { "Content-Type": "application/json" } }
   );

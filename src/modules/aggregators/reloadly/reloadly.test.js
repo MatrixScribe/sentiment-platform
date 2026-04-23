@@ -6,6 +6,9 @@ export async function testReloadly() {
     const operators = await reloadlyOperatorsRequest("GET", "/operators");
     console.log("Reloadly Operators:", operators.length);
   } catch (err) {
-    console.error("Reloadly Test Error:", err.response?.data || err.message);
+    console.error(
+      "Reloadly Test Error:",
+      err.response?.data || err.message
+    );
   }
 }
