@@ -19,17 +19,7 @@ import { testReloadly } from './src/modules/aggregators/reloadly/reloadly.test.j
 const app = express();
 
 // -----------------------------
-// 1. AUTH ROUTES (JSON)
-// -----------------------------
-app.use("/auth", authRoutes);
-
-// -----------------------------
-// 2. CORS
-// -----------------------------
-app.use(cors());
-
-// -----------------------------
-// 3. PAYSTACK WEBHOOK (RAW BODY)
+// 1. PAYSTACK WEBHOOK (RAW BODY)
 // MUST come BEFORE express.json()
 // -----------------------------
 app.post(
@@ -39,9 +29,19 @@ app.post(
 );
 
 // -----------------------------
-// 4. JSON BODY FOR EVERYTHING ELSE
+// 2. JSON BODY FOR EVERYTHING ELSE
 // -----------------------------
 app.use(express.json());
+
+// -----------------------------
+// 3. CORS
+// -----------------------------
+app.use(cors());
+
+// -----------------------------
+// 4. AUTH ROUTES (now have req.body)
+// -----------------------------
+app.use("/auth", authRoutes);
 
 // -----------------------------
 // 5. PAYSTACK INITIATE ROUTES
