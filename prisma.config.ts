@@ -1,7 +1,5 @@
-import { defineConfig } from "@prisma/client";
-
-export default defineConfig({
+export default {
   datasource: {
-    url: process.env.DATABASE_URL,
+    url: process.env.DATABASE_URL!,
   },
-});
+};
