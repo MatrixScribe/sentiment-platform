@@ -6,7 +6,7 @@ console.log("DEBUG PAYSTACK_BASE_URL =", ENV.PAYSTACK_BASE_URL);
 const paystack = axios.create({
   baseURL: ENV.PAYSTACK_BASE_URL,
   headers: {
-    Authorization: `Bearer ${ENV.PAYSTACK_SECRET_KEY}`,
+    Authorization: `Bearer ${ENV.PAYSTACK_SECRET_KEY}`, // MUST be sk_live
     'Content-Type': 'application/json'
   }
 });
